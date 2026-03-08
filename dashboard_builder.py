@@ -1,4 +1,4 @@
-﻿import argparse
+import argparse
 import json
 import re
 from collections import Counter
@@ -83,6 +83,58 @@ def collect_record_files(source_type: str, source_path: Path) -> tuple[list[Path
         except Exception:
             pass
     return files, summary_items
+
+
+def has_core_order_data(source_path: Path) -> bool:
+    """Whether a filters_* run contains /order-list responses with data."""
+    if not source_path.is_dir():
+        return False
+
+    for file in sorted(source_path.glob("*.json")):
+        if file.name == "summary.json":
+            continue
+        try:
+            rows = read_json(file)
+        except Exception:
+            continue
+        if not isinstance(rows, list):
+            continue
+        for row in rows:
+            if not isinstance(row, dict):
+                continue
+            url = str(row.get("url", ""))
+            if "/api/statistics/order-list" not in url:
+                continue
+            payload = row.get("json_data")
+            if not isinstance(payload, dict):
+                continue
+            result = payload.get("result")
+            if isinstance(result, list) and len(result) > 0:
+                return True
+            if isinstance(result, dict):
+                for key in ("list", "data", "items", "rows"):
+                    val = result.get(key)
+                    if isinstance(val, list) and len(val) > 0:
+                        return True
+    return False
+
+
+def is_payload_effectively_empty(payload: dict[str, Any]) -> bool:
+    cards = payload.get("指标卡", {}) if isinstance(payload, dict) else {}
+    tables = payload.get("表格", {}) if isinstance(payload, dict) else {}
+    total = cards.get("统计区间3D订单总量", 0) if isinstance(cards, dict) else 0
+    recent = tables.get("最近3D订单", []) if isinstance(tables, dict) else []
+    return int(total or 0) <= 0 and len(recent) == 0
+
+
+def find_latest_valid_filters_run(output_dir: Path, exclude_path: Path | None = None) -> Path | None:
+    runs = sorted([p for p in output_dir.glob("filters_*") if p.is_dir()], key=lambda p: p.stat().st_mtime, reverse=True)
+    for run in runs:
+        if exclude_path is not None and run.resolve() == exclude_path.resolve():
+            continue
+        if has_core_order_data(run):
+            return run
+    return None
 
 
 def flatten_order_list(value: Any) -> list[dict[str, Any]]:
@@ -339,17 +391,6 @@ def build_3d_dataset(
         "待取件": order_status.get("待取件", 0),
     }
 
-    filter_table = []
-    for item in summary_items:
-        filter_table.append(
-            {
-                "序号": item.get("index", ""),
-                "筛选项": maybe_fix_mojibake(str(item.get("label", ""))),
-                "抓取记录数": item.get("record_count", 0),
-                "错误": str(item.get("error", "")),
-            }
-        )
-
     return {
         "元信息": {
             "生成时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
@@ -373,12 +414,11 @@ def build_3d_dataset(
         "表格": {
             "最近3D订单": recent_orders,
             "最近3D助管操作": recent_actions,
-            "筛选抓取摘要": filter_table[:6],
         },
     }
 
 
-def html_template(payload_json: str) -> str:
+def html_template() -> str:
     return f"""<!doctype html>
 <html lang=\"zh-CN\">
 <head>
@@ -489,7 +529,7 @@ def html_template(payload_json: str) -> str:
     .tables {{
       min-height: 0;
       display: grid;
-      grid-template-rows: repeat(3, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
       gap: 8px;
     }}
 
@@ -526,12 +566,47 @@ def html_template(payload_json: str) -> str:
       .wrap {{ height: auto; min-height: 100vh; }}
       .main {{ grid-template-columns: 1fr; }}
       .charts {{ grid-template-columns: repeat(2, minmax(0,1fr)); grid-template-rows: repeat(3, minmax(260px,1fr)); }}
-      .tables {{ grid-template-rows: repeat(3, minmax(240px,1fr)); }}
+      .tables {{ grid-template-rows: repeat(2, minmax(240px,1fr)); }}
     }}
 
     @media (max-width: 900px) {{
-      .cards {{ grid-template-columns: repeat(3, minmax(120px,1fr)); }}
-      .charts {{ grid-template-columns: 1fr; grid-template-rows: none; }}
+      html, body {{ height: auto; min-height: 100%; }}
+      body {{ overflow: auto; }}
+      .wrap {{
+        height: auto;
+        min-height: 100vh;
+        padding: 10px 10px 16px;
+        gap: 10px;
+      }}
+      .header {{ align-items: flex-start; }}
+      .meta {{ font-size: 12px; gap: 4px; }}
+      .pill {{ padding: 2px 8px; }}
+      .cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+      .card {{ padding: 8px 8px; }}
+      .k {{ font-size: 11px; }}
+      .v {{ font-size: clamp(18px, 5.4vw, 24px); }}
+      .main {{ grid-template-columns: 1fr; gap: 10px; }}
+      .charts {{
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+        grid-auto-rows: minmax(250px, auto);
+      }}
+      .tables {{
+        grid-template-rows: none;
+        grid-auto-rows: minmax(220px, auto);
+      }}
+      .panel {{ overflow: auto; }}
+      .chart {{ height: 250px; min-height: 250px; }}
+      .table-wrap {{ height: auto; overflow: auto; }}
+      table {{ min-width: 520px; font-size: 12px; }}
+      th, td {{ padding: 5px 6px; }}
+    }}
+
+    @media (max-width: 480px) {{
+      .title {{ font-size: clamp(20px, 6.2vw, 28px); }}
+      .cards {{ grid-template-columns: 1fr 1fr; }}
+      .meta {{ display: grid; grid-template-columns: 1fr; }}
+      table {{ min-width: 460px; font-size: 11px; }}
     }}
   </style>
 </head>
@@ -564,35 +639,28 @@ def html_template(payload_json: str) -> str:
       <section class=\"tables\">
         <div class=\"panel\"><h3>最近3D订单</h3><div class=\"table-wrap\" id=\"t_orders\"></div></div>
         <div class=\"panel\"><h3>最近3D助管操作</h3><div class=\"table-wrap\" id=\"t_actions\"></div></div>
-        <div class=\"panel\"><h3>筛选抓取摘要</h3><div class=\"table-wrap\" id=\"t_filters\"></div></div>
       </section>
     </section>
   </div>
 
   <script>
-    const DATA = {payload_json};
+    const REFRESH_MS = 5 * 60 * 1000; // Change here if you want a longer polling interval.
+    const chartMap = {{}};
+    let lastVersion = "";
 
-    const meta = DATA["元信息"] || {{}};
-    document.getElementById("gen").textContent = "生成时间：" + (meta["生成时间"] || "--");
-    document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
-    document.getElementById("range").textContent = "统计区间：" + (meta["统计区间"] || "--");
-    document.getElementById("latest").textContent = "最新统计日期：" + (meta["最新统计日期"] || "--");
-
-    const cardsRoot = document.getElementById("cards");
-    const cards = DATA["指标卡"] || {{}};
-    Object.entries(cards).forEach(([k,v]) => {{
-      const div = document.createElement("div");
-      div.className = "card";
-      div.innerHTML = `<div class=\"k\">${{k}}</div><div class=\"v\">${{Number(v || 0).toLocaleString("zh-CN")}}</div>`;
-      cardsRoot.appendChild(div);
-    }});
+    function getChart(id) {{
+      if (!chartMap[id]) {{
+        chartMap[id] = echarts.init(document.getElementById(id));
+      }}
+      return chartMap[id];
+    }}
 
     function lineChart(id, list, color) {{
-      const chart = echarts.init(document.getElementById(id));
+      const chart = getChart(id);
       const x = (list || []).map(i => i.date);
       const y = (list || []).map(i => i.count);
       chart.setOption({{
-        animationDuration: 700,
+        animation: false,
         grid: {{left: 38, right: 8, top: 22, bottom: 26}},
         tooltip: {{trigger: "axis"}},
         xAxis: {{type: "category", data: x, axisLabel: {{color: "#5f7084", fontSize: 10, interval: Math.max(0, Math.floor(x.length / 8))}}}},
@@ -612,11 +680,11 @@ def html_template(payload_json: str) -> str:
     }}
 
     function barChart(id, items, color) {{
-      const chart = echarts.init(document.getElementById(id));
+      const chart = getChart(id);
       const names = (items || []).map(i => i.name);
       const values = (items || []).map(i => i.count);
       chart.setOption({{
-        animationDuration: 700,
+        animation: false,
         grid: {{left: 88, right: 28, top: 22, bottom: 14}},
         tooltip: {{trigger: "axis", axisPointer: {{type: "shadow"}}}},
         xAxis: {{type: "value", axisLabel: {{color: "#5f7084", fontSize: 10}}, splitLine: {{lineStyle: {{color: "rgba(15,34,56,.08)"}}}}}},
@@ -632,9 +700,9 @@ def html_template(payload_json: str) -> str:
     }}
 
     function pieChart(id, items) {{
-      const chart = echarts.init(document.getElementById(id));
+      const chart = getChart(id);
       chart.setOption({{
-        animationDuration: 700,
+        animation: false,
         tooltip: {{trigger: "item"}},
         legend: {{bottom: 0, textStyle: {{color: "#5f7084", fontSize: 10}}}},
         series: [{{
@@ -662,23 +730,66 @@ def html_template(payload_json: str) -> str:
       root.innerHTML = `<table>${{thead}}${{tbody}}</table>`;
     }}
 
-    const trends = DATA["趋势"] || {{}};
-    const dist = DATA["分布"] || {{}};
-    const tables = DATA["表格"] || {{}};
+    function renderDashboard(data) {{
+      const meta = data["元信息"] || {{}};
+      document.getElementById("gen").textContent = "生成时间：" + (meta["生成时间"] || "--");
+      document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
+      document.getElementById("range").textContent = "统计区间：" + (meta["统计区间"] || "--");
+      document.getElementById("latest").textContent = "最新统计日期：" + (meta["最新统计日期"] || "--");
 
-    const charts = [];
-    charts.push(lineChart("c_order_trend", trends["3D订单日趋势"] || [], "#ff5a36"));
-    charts.push(lineChart("c_action_trend", trends["3D助管操作日趋势"] || [], "#1f8ed8"));
-    charts.push(pieChart("c_status", dist["订单状态"] || []));
-    charts.push(pieChart("c_print", dist["打印工艺"] || []));
-    charts.push(barChart("c_purpose", dist["订单用途"] || [], "#3f9142"));
-    charts.push(barChart("c_action_type", dist["助管操作类型"] || [], "#2d80c2"));
+      const cardsRoot = document.getElementById("cards");
+      cardsRoot.innerHTML = "";
+      const cards = data["指标卡"] || {{}};
+      Object.entries(cards).forEach(([k,v]) => {{
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `<div class=\"k\">${{k}}</div><div class=\"v\">${{Number(v || 0).toLocaleString("zh-CN")}}</div>`;
+        cardsRoot.appendChild(div);
+      }});
 
-    drawTable("t_orders", tables["最近3D订单"] || [], 8);
-    drawTable("t_actions", tables["最近3D助管操作"] || [], 8);
-    drawTable("t_filters", tables["筛选抓取摘要"] || [], 6);
+      const trends = data["趋势"] || {{}};
+      const dist = data["分布"] || {{}};
+      const tables = data["表格"] || {{}};
 
-    window.addEventListener("resize", () => charts.forEach(c => c && c.resize()));
+      lineChart("c_order_trend", trends["3D订单日趋势"] || [], "#ff5a36");
+      lineChart("c_action_trend", trends["3D助管操作日趋势"] || [], "#1f8ed8");
+      pieChart("c_status", dist["订单状态"] || []);
+      pieChart("c_print", dist["打印工艺"] || []);
+      barChart("c_purpose", dist["订单用途"] || [], "#3f9142");
+      barChart("c_action_type", dist["助管操作类型"] || [], "#2d80c2");
+
+      drawTable("t_orders", tables["最近3D订单"] || [], 8);
+      drawTable("t_actions", tables["最近3D助管操作"] || [], 8);
+    }}
+
+    function calcVersion(data) {{
+      const meta = data["元信息"] || {{}};
+      const cards = data["指标卡"] || {{}};
+      return `${{meta["生成时间"] || ""}}|${{meta["最新统计日期"] || ""}}|${{JSON.stringify(cards)}}`;
+    }}
+
+    async function loadAndRender() {{
+      try {{
+        const resp = await fetch(`./data.json?_=${{Date.now()}}`, {{ cache: "no-store" }});
+        if (!resp.ok) {{
+          throw new Error(`HTTP ${{resp.status}}`);
+        }}
+        const data = await resp.json();
+        const version = calcVersion(data);
+        if (version === lastVersion) {{
+          return;
+        }}
+        lastVersion = version;
+        renderDashboard(data);
+      }} catch (err) {{
+        console.error("load dashboard failed", err);
+      }}
+    }}
+
+    loadAndRender();
+    setInterval(loadAndRender, REFRESH_MS);
+
+    window.addEventListener("resize", () => Object.values(chartMap).forEach(c => c && c.resize()));
   </script>
 </body>
 </html>
@@ -699,6 +810,18 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
     results = pick_endpoint_results(files)
     payload = build_3d_dataset(source_type, source_path, summary_items, results)
 
+    # Fallback: if current run misses core order-list data, use latest valid historical run.
+    if source_type == "filters" and is_payload_effectively_empty(payload):
+        fallback_run = find_latest_valid_filters_run(output_dir, exclude_path=source_path)
+        if fallback_run is not None:
+            fb_files, fb_summary_items = collect_record_files("filters", fallback_run)
+            fb_results = pick_endpoint_results(fb_files)
+            fb_payload = build_3d_dataset("filters", fallback_run, fb_summary_items, fb_results)
+            fb_meta = fb_payload.get("元信息", {}) if isinstance(fb_payload, dict) else {}
+            if isinstance(fb_meta, dict):
+                fb_meta["回退说明"] = f"本次抓取缺少订单统计数据，已回退到 {fallback_run.name}"
+            payload = fb_payload
+
     dashboard_dir.mkdir(parents=True, exist_ok=True)
     data_path = dashboard_dir / "data.json"
     html_path = dashboard_dir / "index.html"
@@ -706,8 +829,7 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
     with data_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    payload_json = json.dumps(payload, ensure_ascii=False).replace("</script>", "<\\/script>")
-    html = html_template(payload_json)
+    html = html_template()
     with html_path.open("w", encoding="utf-8") as f:
         f.write(html)
 
