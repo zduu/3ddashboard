@@ -418,7 +418,7 @@ def build_3d_dataset(
     }
 
 
-def html_template() -> str:
+def html_template(payload_json: str) -> str:
     return f"""<!doctype html>
 <html lang=\"zh-CN\">
 <head>
@@ -644,6 +644,8 @@ def html_template() -> str:
   </div>
 
   <script>
+    const EMBEDDED_DATA = {payload_json};
+    const IS_FILE_PROTOCOL = window.location.protocol === "file:";
     const REFRESH_MS = 5 * 60 * 1000; // Change here if you want a longer polling interval.
     const chartMap = {{}};
     let lastVersion = "";
@@ -786,8 +788,15 @@ def html_template() -> str:
       }}
     }}
 
-    loadAndRender();
-    setInterval(loadAndRender, REFRESH_MS);
+    if (EMBEDDED_DATA && typeof EMBEDDED_DATA === "object") {{
+      lastVersion = calcVersion(EMBEDDED_DATA);
+      renderDashboard(EMBEDDED_DATA);
+    }}
+
+    if (!IS_FILE_PROTOCOL) {{
+      loadAndRender();
+      setInterval(loadAndRender, REFRESH_MS);
+    }}
 
     window.addEventListener("resize", () => Object.values(chartMap).forEach(c => c && c.resize()));
   </script>
@@ -829,7 +838,8 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
     with data_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
-    html = html_template()
+    payload_json = json.dumps(payload, ensure_ascii=False).replace("</script>", "<\\/script>")
+    html = html_template(payload_json)
     with html_path.open("w", encoding="utf-8") as f:
         f.write(html)
 
