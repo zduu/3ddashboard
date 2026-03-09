@@ -272,6 +272,31 @@ def filter_3d_assist(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     return out
 
 
+def extract_operator_name(operator: Any) -> str:
+    if isinstance(operator, str):
+        return maybe_fix_mojibake(operator.strip())
+    if not isinstance(operator, dict):
+        return ""
+
+    candidates: list[Any] = [
+        operator.get("nickname"),
+        operator.get("name"),
+        operator.get("username"),
+        operator.get("realname"),
+        operator.get("operator"),
+        operator.get("account"),
+    ]
+    sjtu = operator.get("sjtu_info")
+    if isinstance(sjtu, dict):
+        candidates.extend([sjtu.get("name"), sjtu.get("account")])
+
+    for item in candidates:
+        text = str(item or "").strip()
+        if text:
+            return maybe_fix_mojibake(text)
+    return ""
+
+
 def build_actions_from_order_tags(orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out: list[dict[str, Any]] = []
     for order in orders:
@@ -294,6 +319,19 @@ def build_actions_from_order_tags(orders: list[dict[str, Any]]) -> list[dict[str
 
             tag_time = str(tag.get("time") or order.get("update_at") or order.get("create_at") or "")
             operator_name = str(tag.get("operator") or "").strip()
+            if not operator_name:
+                operator_name = extract_operator_name(order.get("operator"))
+            if not operator_name:
+                order_actions = order.get("actions")
+                if isinstance(order_actions, list):
+                    for hist in reversed(order_actions):
+                        if not isinstance(hist, dict):
+                            continue
+                        operator_name = extract_operator_name(hist.get("operator"))
+                        if not operator_name:
+                            operator_name = extract_operator_name(hist.get("admin"))
+                        if operator_name:
+                            break
             tag_type = str(tag.get("process_type") or order_type).strip()
 
             out.append(
@@ -419,11 +457,9 @@ def build_3d_dataset(
             action_daily[d] += 1
 
         operator = a.get("operator")
-        op_name = ""
-        if isinstance(operator, dict):
-            op_name = str(operator.get("nickname", "")).strip()
-        elif isinstance(operator, str):
-            op_name = operator.strip()
+        op_name = extract_operator_name(operator)
+        if not op_name:
+            op_name = extract_operator_name(a.get("admin"))
 
         recent_actions.append(
             {
