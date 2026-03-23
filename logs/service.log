@@ -1,0 +1,132 @@
+----------------------------------------
+Exception occurred during processing of request from ('202.121.181.104', 3814)
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 292, in parse_request
+    raise ValueError
+ValueError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 414, in handle_one_request
+    if not self.parse_request():
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 309, in parse_request
+    self.send_error(
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 466, in send_error
+    self.log_error("code %d, message %s", code, message)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 568, in log_error
+    self.log_message(format, *args)
+  File "F:\something\guest\3dashboard\run.py", line 42, in log_message
+    print(f"[{now_str()}] [WEB] {msg}")
+UnicodeEncodeError: 'gbk' codec can't encode character '\xcb' in position 68: illegal multibyte sequence
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('202.121.181.104', 3846)
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 292, in parse_request
+    raise ValueError
+ValueError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 414, in handle_one_request
+    if not self.parse_request():
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 309, in parse_request
+    self.send_error(
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 466, in send_error
+    self.log_error("code %d, message %s", code, message)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 568, in log_error
+    self.log_message(format, *args)
+  File "F:\something\guest\3dashboard\run.py", line 42, in log_message
+    print(f"[{now_str()}] [WEB] {msg}")
+UnicodeEncodeError: 'gbk' codec can't encode character '\xc0' in position 103: illegal multibyte sequence
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('202.121.181.104', 3847)
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 292, in parse_request
+    raise ValueError
+ValueError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 414, in handle_one_request
+    if not self.parse_request():
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 309, in parse_request
+    self.send_error(
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 466, in send_error
+    self.log_error("code %d, message %s", code, message)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 568, in log_error
+    self.log_message(format, *args)
+  File "F:\something\guest\3dashboard\run.py", line 42, in log_message
+    print(f"[{now_str()}] [WEB] {msg}")
+UnicodeEncodeError: 'gbk' codec can't encode character '\xf6' in position 68: illegal multibyte sequence
+----------------------------------------
+----------------------------------------
+Exception occurred during processing of request from ('202.121.181.104', 3848)
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 292, in parse_request
+    raise ValueError
+ValueError
+
+During handling of the above exception, another exception occurred:
+
+Traceback (most recent call last):
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 691, in process_request_thread
+    self.finish_request(request, client_address)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 361, in finish_request
+    self.RequestHandlerClass(request, client_address, self)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 671, in __init__
+    super().__init__(*args, **kwargs)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\socketserver.py", line 755, in __init__
+    self.handle()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 436, in handle
+    self.handle_one_request()
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 414, in handle_one_request
+    if not self.parse_request():
+           ^^^^^^^^^^^^^^^^^^^^
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 309, in parse_request
+    self.send_error(
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 466, in send_error
+    self.log_error("code %d, message %s", code, message)
+  File "C:\Users\zhoujie\.conda\envs\zhoujie\Lib\http\server.py", line 568, in log_error
+    self.log_message(format, *args)
+  File "F:\something\guest\3dashboard\run.py", line 42, in log_message
+    print(f"[{now_str()}] [WEB] {msg}")
+UnicodeEncodeError: 'gbk' codec can't encode character '\xe4' in position 73: illegal multibyte sequence
+----------------------------------------
