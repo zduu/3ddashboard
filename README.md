@@ -23,7 +23,13 @@ python -m playwright install chromium
 ## 2. 持续运行模式（推荐）
 
 ```powershell
+# Windows（双击）
+start_win.bat
+# Windows（命令行）
 python run.py
+
+# mac/Linux（命令行）
+./start_mac.sh
 ```
 
 默认行为：
@@ -45,6 +51,19 @@ python run.py --single
 - `--auto-login-if-missing-state`：当会话文件不存在时先执行登录流程
 - `--single`：每轮仅抓首屏请求
 - 停止服务按 `Ctrl + C`
+
+快捷启动：
+- Windows：双击 `start_win.bat`（自动寻找 Python，窗口不立即关闭）
+- mac/Linux：在终端运行 `./start_mac.sh`（首次可能需要 `chmod +x start_mac.sh`）
+
+Windows 提示 “Python not found” 处理方式：
+- 方式 A（推荐）：在项目根目录新建 `PY_PATH.txt`，写入你本机的 Python 路径（如 `C:\\Users\\zhoujie\\.conda\\envs\\zhoujie\\python.exe`），保存后再次双击 `start_win.bat`。
+- 方式 B：确保安装了 Windows Python Launcher（可用 `py -3`），或把你的 `python.exe` 加入系统 PATH。
+
+mac/Linux 指定 Python 环境方式：
+- 方式 A（推荐）：在项目根目录新建 `PY_PATH.txt`，第一行写 Python 命令或绝对路径（如 `/Users/you/miniconda3/envs/zhoujie/bin/python`），`./start_mac.sh` 会优先使用。
+- 方式 B：在终端预先导出环境变量：`export PY_CMD=/Users/you/miniconda3/envs/zhoujie/bin/python`，然后运行 `./start_mac.sh`。
+- 方式 C：确保 `python3` 或 `python` 在 PATH 中；若都找不到，脚本会提示你输入 Python 路径。
 
 ## 3. 单次执行（手动）
 

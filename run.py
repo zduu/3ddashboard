@@ -52,20 +52,24 @@ def start_web_server(directory: Path, host: str, port: int) -> ThreadingHTTPServ
     return server
 
 
-def run_subprocess(cmd: list[str], cwd: Path) -> int:
+def run_subprocess(cmd: list[str], cwd: Path, interactive: bool = False) -> int:
     print(f"[{now_str()}] [TASK] Running: {' '.join(cmd)}")
-    proc = subprocess.run(
-        cmd,
-        cwd=str(cwd),
-        capture_output=True,
-        text=True,
-        encoding="utf-8",
-        errors="replace",
-    )
-    if proc.stdout.strip():
-        print(proc.stdout.strip())
-    if proc.stderr.strip():
-        print(proc.stderr.strip())
+    if interactive:
+        # Attach to current stdio so child can receive input (e.g., `input()` prompts).
+        proc = subprocess.run(cmd, cwd=str(cwd))
+    else:
+        proc = subprocess.run(
+            cmd,
+            cwd=str(cwd),
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+        )
+        if proc.stdout.strip():
+            print(proc.stdout.strip())
+        if proc.stderr.strip():
+            print(proc.stderr.strip())
     print(f"[{now_str()}] [TASK] Exit code: {proc.returncode}")
     return proc.returncode
 
@@ -197,7 +201,8 @@ def run_login_if_needed(args: argparse.Namespace, cwd: Path) -> bool:
         return False
 
     login_cmd = [args.python_exe, args.main_script, *build_main_common_args(args), "login"]
-    code = run_subprocess(login_cmd, cwd)
+    # Run interactively so the user can press Enter after finishing login.
+    code = run_subprocess(login_cmd, cwd, interactive=True)
     return code == 0
 
 
