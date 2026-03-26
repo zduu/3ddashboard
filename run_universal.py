@@ -1,5 +1,6 @@
 import argparse
 import json
+import os
 import shutil
 import subprocess
 import sys
@@ -16,6 +17,8 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_KEEP_OUTPUT_RUNS = 9
 DEFAULT_KEEP_SINGLE_FILES = 9
+
+IS_FROZEN = getattr(sys, "frozen", False)
 
 
 def now_str() -> str:
@@ -101,6 +104,44 @@ def run_subprocess(cmd: list[str], cwd: Path, interactive: bool = False) -> int:
             print(proc.stderr.strip())
     print(f"[{now_str()}] [TASK] Exit code: {proc.returncode}")
     return proc.returncode
+
+
+def resolve_runtime_root(script_path: Path) -> Path:
+    if IS_FROZEN:
+        return Path(sys.executable).resolve().parent
+    return script_path.resolve().parent
+
+
+def ensure_playwright_browsers_path(base_dir: Path) -> None:
+    if os.environ.get("PLAYWRIGHT_BROWSERS_PATH"):
+        return
+    candidate = base_dir / "ms-playwright"
+    if candidate.exists():
+        os.environ["PLAYWRIGHT_BROWSERS_PATH"] = str(candidate)
+
+
+def run_main_inline(cli_args: list[str]) -> int:
+    from main import main as main_entry
+
+    original_argv = sys.argv[:]
+    try:
+        sys.argv = ["main.py", *cli_args]
+        return main_entry()
+    finally:
+        sys.argv = original_argv
+
+
+def run_main_command(args: argparse.Namespace, cwd: Path, extra_cli: list[str], interactive: bool = False) -> int:
+    cli = [*build_main_common_args(args), *extra_cli]
+    if IS_FROZEN:
+        prev = Path.cwd()
+        try:
+            os.chdir(cwd)
+            return run_main_inline(cli)
+        finally:
+            os.chdir(prev)
+    cmd = [args.python_exe, args.main_script, *cli]
+    return run_subprocess(cmd, cwd, interactive=interactive)
 
 
 def latest_filters_summary(output_dir: Path) -> dict | None:
@@ -246,8 +287,7 @@ def run_login_if_needed(args: argparse.Namespace, cwd: Path) -> bool:
         )
         return False
 
-    login_cmd = [args.python_exe, args.main_script, *build_main_common_args(args), "login"]
-    code = run_subprocess(login_cmd, cwd, interactive=True)
+    code = run_main_command(args, cwd, ["login"], interactive=True)
     return code == 0
 
 
@@ -257,17 +297,16 @@ def run_once(args: argparse.Namespace, cwd: Path) -> int:
         return 2
 
     output_dir = (cwd / args.output_dir).resolve()
-    cmd = [args.python_exe, args.main_script, *build_main_common_args(args), "fetch"]
+    extra = ["fetch"]
     if args.single:
-        cmd.append("--single")
-    code = run_subprocess(cmd, cwd)
+        extra.append("--single")
+    code = run_main_command(args, cwd, extra)
     if code != 0:
         if args.auto_login_if_missing_state:
             print(f"[{now_str()}] [TASK] Fetch failed, retrying after re-login once...")
-            login_cmd = [args.python_exe, args.main_script, *build_main_common_args(args), "login"]
-            login_code = run_subprocess(login_cmd, cwd, interactive=True)
+            login_code = run_main_command(args, cwd, ["login"], interactive=True)
             if login_code == 0:
-                code = run_subprocess(cmd, cwd)
+                code = run_main_command(args, cwd, extra)
                 if code == 0:
                     return 0
         return code
@@ -278,7 +317,7 @@ def run_once(args: argparse.Namespace, cwd: Path) -> int:
     summary = latest_filters_summary(output_dir)
     if should_retry_missing_order_stats(summary):
         print(f"[{now_str()}] [TASK] Missing order-stats capture detected, retrying once...")
-        retry_code = run_subprocess(cmd, cwd)
+        retry_code = run_main_command(args, cwd, extra)
         if retry_code != 0:
             return retry_code
         retry_summary = latest_filters_summary(output_dir)
@@ -291,7 +330,11 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Keep running data capture every N minutes and serve dashboard as a website."
     )
-    parser.add_argument("--python-exe", default=sys.executable, help="Python executable path.")
+    parser.add_argument(
+        "--python-exe",
+        default=sys.executable,
+        help="Python executable path (ignored when packaged).",
+    )
     parser.add_argument("--main-script", default="main.py", help="Main capture script path.")
     parser.add_argument("--interval-minutes", type=int, default=DEFAULT_INTERVAL_MINUTES, help="Update interval minutes.")
     parser.add_argument("--host", default=DEFAULT_HOST, help="Web server host.")

@@ -10,6 +10,8 @@ from typing import Any
 from playwright.sync_api import Page, sync_playwright
 from dashboard_builder import build_dashboard
 
+DEFAULT_BROWSER_CHANNEL = "auto"
+
 
 DEFAULT_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/order-count"
 DEFAULT_STATE_PATH = Path("state/auth_state.json")
@@ -141,6 +143,42 @@ def build_record(resp: Any) -> dict[str, Any]:
     }
 
 
+def iter_browser_channels(channel: str | None) -> list[str | None]:
+    ch = (channel or "").strip().lower()
+    if not ch or ch == "default":
+        return [None]
+    if ch == "auto":
+        order: list[str | None] = []
+        if sys.platform.startswith("win"):
+            order = ["msedge", "chrome", "chromium", None]
+        elif sys.platform == "darwin":
+            order = ["chrome", "msedge", "chromium", None]
+        else:
+            order = ["chromium", "chrome", None]
+        return order
+    return [ch, None]
+
+
+def launch_browser(p, headless: bool, channel: str | None):
+    last_error: Exception | None = None
+    for candidate in iter_browser_channels(channel):
+        launch_args: dict[str, Any] = {"headless": headless}
+        if candidate:
+            launch_args["channel"] = candidate
+        try:
+            browser = p.chromium.launch(**launch_args)
+            if candidate:
+                print(f"[INFO] Using browser channel: {candidate}")
+            else:
+                print("[INFO] Using bundled Playwright Chromium")
+            return browser
+        except Exception as e:
+            last_error = e
+            print(f"[WARN] Failed to launch channel '{candidate or 'default'}': {e}")
+            continue
+    raise last_error if last_error else RuntimeError("Unable to launch browser")
+
+
 def capture_data(
     page_url: str,
     state_path: Path,
@@ -158,11 +196,7 @@ def capture_data(
     records: list[dict[str, Any]] = []
 
     with sync_playwright() as p:
-        launch_args: dict[str, Any] = {"headless": headless}
-        if browser_channel:
-            launch_args["channel"] = browser_channel
-
-        browser = p.chromium.launch(**launch_args)
+        browser = launch_browser(p, headless=headless, channel=browser_channel)
         context = browser.new_context(storage_state=str(state_path))
         page = context.new_page()
 
@@ -321,11 +355,7 @@ def capture_data_by_filters(
     run_dir.mkdir(parents=True, exist_ok=True)
 
     with sync_playwright() as p:
-        launch_args: dict[str, Any] = {"headless": headless}
-        if browser_channel:
-            launch_args["channel"] = browser_channel
-
-        browser = p.chromium.launch(**launch_args)
+        browser = launch_browser(p, headless=headless, channel=browser_channel)
         context = browser.new_context(storage_state=str(state_path))
         page = context.new_page()
 
@@ -492,8 +522,8 @@ def build_parser() -> argparse.ArgumentParser:
     )
     parser.add_argument(
         "--browser-channel",
-        default="msedge",
-        help="Browser channel for Playwright (e.g. msedge/chrome/chromium).",
+        default=DEFAULT_BROWSER_CHANNEL,
+        help="Browser channel: auto/msedge/chrome/chromium. 'auto' will try installed browsers then fallback to bundled Chromium.",
     )
     parser.add_argument(
         "--filter-selector",

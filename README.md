@@ -25,6 +25,9 @@ python -m playwright install chromium
 ```powershell
 # Windows（双击）
 start_win.bat
+# Windows（免环境 .exe）
+dist\dashboard_runner.exe  # 双击即运行
+
 # Windows（命令行）
 python run.py
 
@@ -54,7 +57,19 @@ python run.py --single
 
 快捷启动：
 - Windows：双击 `start_win.bat`（自动寻找 Python，窗口不立即关闭）
+- Windows（免环境）：双击 `dist\dashboard_runner.exe`（内置 Python + Playwright）
 - mac/Linux：在终端运行 `./start_mac.sh`（首次可能需要 `chmod +x start_mac.sh`）
+
+生成免环境 EXE：
+
+```powershell
+./package_windows.ps1
+```
+
+脚本会自动：
+- 创建/复用 `.venv`
+- 安装依赖 + PyInstaller + Playwright 浏览器
+- 生成 `dist\dashboard_runner.exe` 并携带 `ms-playwright` 目录
 
 Windows 提示 “Python not found” 处理方式：
 - 方式 A（推荐）：在项目根目录新建 `PY_PATH.txt`，写入你本机的 Python 路径（如 `C:\\Users\\zhoujie\\.conda\\envs\\zhoujie\\python.exe`），保存后再次双击 `start_win.bat`。
@@ -111,6 +126,7 @@ python main.py --no-dashboard
 python main.py --filter-wait-ms 5000
 python main.py --filter-selector ".el-radio-button__inner"
 python main.py --browser-channel chrome
+# 浏览器渠道说明：默认 `auto` 会依次尝试已安装的 Edge/Chrome/Chromium，全部不可用时自动回落到内置的 Playwright Chromium。
 ```
 
 ## 7. 单独重建看板
