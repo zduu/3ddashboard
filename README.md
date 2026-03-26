@@ -80,6 +80,25 @@ mac/Linux 指定 Python 环境方式：
 - 方式 B：在终端预先导出环境变量：`export PY_CMD=/Users/you/miniconda3/envs/zhoujie/bin/python`，然后运行 `./start_mac.sh`。
 - 方式 C：确保 `python3` 或 `python` 在 PATH 中；若都找不到，脚本会提示你输入 Python 路径。
 
+无弹窗后台运行（Windows）
+- 需求：登录完成后可在后台运行，不占用或依赖控制台窗口；再次点击可一键关闭。
+- 步骤：
+  1) 首次用 `start_win.bat` 完成登录（会弹出浏览器，回车确认）。生成 `state/auth_state.json` 后即可进入无弹窗模式。
+  2) 使用 `toggle_service.vbs` 切换运行状态：
+     - 若服务未运行：隐藏启动 `run.py`（使用 `pythonw`），日志写入 `logs/service.log`。
+     - 若服务已运行：自动结束对应进程（等同“关闭服务”）。
+  3) 如需指定 Python 路径，在项目根放置 `PY_PATH.txt`（写入 `python.exe` 路径，脚本会自动换成 `pythonw.exe`）。
+
+无弹窗后台运行（mac/Linux）
+- 需求：在终端中后台运行且不占用前台窗口。
+- 示例：
+  ```bash
+  nohup ./start_mac.sh > logs/service.log 2>&1 &
+  disown
+  ```
+  - 日志输出在 `logs/service.log`
+  - 结束可用 `pkill -f run_universal.py` 或找到对应 PID 用 `kill`
+
 ## 3. 单次执行（手动）
 
 ```powershell
