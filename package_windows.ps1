@@ -23,8 +23,8 @@ if (-not (Test-Path .venv)) {
 & .\.venv\Scripts\pip install --upgrade pip > $null
 & .\.venv\Scripts\pip install -r requirements.txt pyinstaller > $null
 
-Write-Step "Installing Playwright browsers"
-& .\.venv\Scripts\python -m playwright install chromium msedge > $null
+Write-Step "Installing Playwright (driver only, no bundled browsers)"
+& .\.venv\Scripts\pip install -r requirements.txt pyinstaller > $null
 
 Write-Step "Running PyInstaller"
 $specArgs = @(
@@ -37,9 +37,5 @@ $specArgs = @(
 
 & .\.venv\Scripts\pyinstaller @specArgs
 
-Write-Step "Copying bundled Playwright browsers"
-$pwSrc = Join-Path (Resolve-Path '.\.venv\Scripts\..\') 'Lib\site-packages\playwright\driver\package\win64'
-$pwDest = Join-Path $OutputDir 'ms-playwright'
-robocopy $pwSrc $pwDest /E > $null
-
 Write-Step "Packaging complete. EXE located at $OutputDir\dashboard_runner.exe"
+Write-Step "Note: requires Chrome or Edge installed on target machine."

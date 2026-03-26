@@ -20,9 +20,108 @@ DEFAULT_KEEP_SINGLE_FILES = 9
 
 IS_FROZEN = getattr(sys, "frozen", False)
 
+SIGNAL_RELOGIN = "relogin.flag"
+SIGNAL_STOP = "stop.flag"
+PID_FILE = "dashboard.pid"
+LOG_FILE = "dashboard.log"
+
 
 def now_str() -> str:
     return datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+
+
+def setup_logging(cwd: Path) -> None:
+    """Redirect stdout/stderr to log file when running as frozen EXE."""
+    if not IS_FROZEN:
+        return
+    log_path = cwd / LOG_FILE
+    try:
+        log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
+        sys.stdout = log_fh
+        sys.stderr = log_fh
+    except Exception:
+        pass
+
+
+def write_pid(cwd: Path) -> None:
+    (cwd / PID_FILE).write_text(str(os.getpid()), encoding="utf-8")
+
+
+def remove_pid(cwd: Path) -> None:
+    try:
+        (cwd / PID_FILE).unlink(missing_ok=True)
+    except Exception:
+        pass
+
+
+def check_signal(cwd: Path, name: str) -> bool:
+    flag = cwd / name
+    if flag.exists():
+        try:
+            flag.unlink()
+        except Exception:
+            pass
+        return True
+    return False
+
+
+def is_service_running(cwd: Path) -> bool:
+    """Check if a service instance is already running via PID file."""
+    pid_path = cwd / PID_FILE
+    if not pid_path.exists():
+        return False
+    try:
+        pid = int(pid_path.read_text(encoding="utf-8").strip())
+    except Exception:
+        return False
+    # Check if process is alive.
+    if sys.platform.startswith("win"):
+        import ctypes
+        kernel32 = ctypes.windll.kernel32
+        handle = kernel32.OpenProcess(0x1000, False, pid)  # PROCESS_QUERY_LIMITED_INFORMATION
+        if handle:
+            kernel32.CloseHandle(handle)
+            return True
+        return False
+    else:
+        try:
+            os.kill(pid, 0)
+            return True
+        except OSError:
+            return False
+
+
+def show_control_dialog(cwd: Path) -> str | None:
+    """Show a tkinter dialog when service is already running. Returns action."""
+    import tkinter as tk
+    from tkinter import messagebox
+
+    result = {"action": None}
+
+    root = tk.Tk()
+    root.title("3D打印数据看板")
+    root.resizable(False, False)
+
+    # Center window.
+    w, h = 300, 200
+    x = (root.winfo_screenwidth() - w) // 2
+    y = (root.winfo_screenheight() - h) // 2
+    root.geometry(f"{w}x{h}+{x}+{y}")
+
+    tk.Label(root, text="服务正在运行中", font=("Microsoft YaHei", 14)).pack(pady=(20, 15))
+
+    def do_action(action: str) -> None:
+        result["action"] = action
+        root.destroy()
+
+    btn_frame = tk.Frame(root)
+    btn_frame.pack(pady=5)
+    tk.Button(btn_frame, text="重新登录", width=14, command=lambda: do_action("relogin")).pack(pady=4)
+    tk.Button(btn_frame, text="终止服务", width=14, command=lambda: do_action("stop")).pack(pady=4)
+
+    root.protocol("WM_DELETE_WINDOW", root.destroy)
+    root.mainloop()
+    return result["action"]
 
 
 def ensure_dashboard_placeholder(directory: Path) -> None:
@@ -343,7 +442,7 @@ def build_parser() -> argparse.ArgumentParser:
     parser.add_argument("--page-url", default="https://make.sjtu.edu.cn/admin/statistics/order-count", help="Target page URL.")
     parser.add_argument("--state-path", default="state/auth_state.json", help="Login state path.")
     parser.add_argument("--output-dir", default="output", help="Capture output directory.")
-    parser.add_argument("--browser-channel", default="chrome", help="Browser channel: chrome/msedge/chromium.")
+    parser.add_argument("--browser-channel", default="auto", help="Browser channel: auto/chrome/msedge/chromium.")
     parser.add_argument("--filter-selector", default="", help="Optional CSS selector for filter buttons.")
     parser.add_argument("--filter-wait-ms", type=int, default=3500, help="Wait after each filter click in ms.")
     parser.add_argument(
@@ -392,15 +491,36 @@ def build_parser() -> argparse.ArgumentParser:
 def main() -> int:
     args = build_parser().parse_args()
     cwd = Path(__file__).resolve().parent
+    if IS_FROZEN:
+        cwd = Path(sys.executable).resolve().parent
+
+    # If service is already running, show control dialog instead of starting again.
+    if is_service_running(cwd):
+        action = show_control_dialog(cwd)
+        if action == "relogin":
+            (cwd / SIGNAL_RELOGIN).write_text("", encoding="utf-8")
+        elif action == "stop":
+            (cwd / SIGNAL_STOP).write_text("", encoding="utf-8")
+        return 0
+
+    setup_logging(cwd)
+    write_pid(cwd)
+
     dashboard_dir = (cwd / args.dashboard_dir).resolve()
     output_dir = (cwd / args.output_dir).resolve()
     ensure_dashboard_placeholder(dashboard_dir)
     if args.interval_minutes <= 0:
         print("[ERROR] --interval-minutes must be > 0")
+        remove_pid(cwd)
         return 1
     if args.keep_output_runs <= 0 or args.keep_single_files <= 0:
         print("[ERROR] --keep-output-runs and --keep-single-files must be > 0")
+        remove_pid(cwd)
         return 1
+
+    # Clean stale signal files from previous runs.
+    check_signal(cwd, SIGNAL_RELOGIN)
+    check_signal(cwd, SIGNAL_STOP)
 
     server = start_web_server(dashboard_dir, args.host, args.port)
     interval = timedelta(minutes=args.interval_minutes)
@@ -414,6 +534,20 @@ def main() -> int:
 
     while True:
         try:
+            # Check stop signal.
+            if check_signal(cwd, SIGNAL_STOP):
+                print(f"[{now_str()}] [SYS] Stop signal received, shutting down.")
+                server.shutdown()
+                remove_pid(cwd)
+                return 0
+
+            # Check re-login signal.
+            if check_signal(cwd, SIGNAL_RELOGIN):
+                print(f"[{now_str()}] [SYS] Re-login signal received.")
+                run_main_command(args, cwd, ["login"], interactive=True)
+                print(f"[{now_str()}] [SYS] Re-login complete.")
+                next_run = datetime.now()
+
             now = datetime.now()
             if now >= next_run:
                 started = time.time()
@@ -430,10 +564,10 @@ def main() -> int:
             time.sleep(1.0)
         except KeyboardInterrupt:
             ts = time.time()
-            # VS Code "Run" may emit a single SIGINT; require double Ctrl+C to exit.
             if ts - last_interrupt_ts <= 3.0:
                 print(f"[{now_str()}] [SYS] Stopped by user.")
                 server.shutdown()
+                remove_pid(cwd)
                 return 0
             last_interrupt_ts = ts
             print(f"[{now_str()}] [SYS] Interrupt received. Press Ctrl+C again within 3s to stop.")
