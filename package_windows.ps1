@@ -1,8 +1,12 @@
-$ErrorActionPreference = 'Stop'
-
 param(
     [string]$OutputDir = 'dist'
 )
+
+$ErrorActionPreference = 'Stop'
+
+if ($MyInvocation.InvocationName -ne '.') {
+    Write-Host "[build] 提示：请使用 PowerShell 调用此脚本，例如：powershell -ExecutionPolicy Bypass -File package_windows.ps1" -ForegroundColor Yellow
+}
 
 function Write-Step($text) {
     Write-Host "[build] $text" -ForegroundColor Cyan
