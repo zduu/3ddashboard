@@ -30,7 +30,7 @@ Write-Step "Running PyInstaller"
 $specArgs = @(
     '--noconfirm',
     '--onefile',
-    '--console',
+    '--windowed',
     '--name', 'dashboard_runner',
     'run_universal.py'
 )

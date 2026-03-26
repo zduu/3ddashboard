@@ -70,6 +70,10 @@ python run.py --single
 - 创建/复用 `.venv`
 - 安装依赖 + PyInstaller + Playwright 浏览器
 - 生成 `dist\dashboard_runner.exe` 并携带 `ms-playwright` 目录
+- exe 采用 GUI 模式（`pythonw`），运行时不再弹出控制台窗口；日志可查看 `logs/service.log`
+
+CI 发布：
+- 推送 `v*` 标签或在 Actions 手动触发 `build-release`，GitHub Actions 会在 Windows 环境运行 `package_windows.ps1`，并把 `dist` 压缩后作为 Release 附件。
 
 Windows 提示 “Python not found” 处理方式：
 - 方式 A（推荐）：在项目根目录新建 `PY_PATH.txt`，写入你本机的 Python 路径（如 `C:\\Users\\zhoujie\\.conda\\envs\\zhoujie\\python.exe`），保存后再次双击 `start_win.bat`。
@@ -146,6 +150,8 @@ python main.py --filter-wait-ms 5000
 python main.py --filter-selector ".el-radio-button__inner"
 python main.py --browser-channel chrome
 # 浏览器渠道说明：默认 `auto` 会依次尝试已安装的 Edge/Chrome/Chromium，全部不可用时自动回落到内置的 Playwright Chromium。
+python main.py --assist-page-url https://make.sjtu.edu.cn/admin/statistics/assist-action
+# 助管操作页面：若有自定义域名或镜像，可用此参数覆盖；默认会额外抓取一次助管操作页以丰富看板。
 ```
 
 ## 7. 单独重建看板

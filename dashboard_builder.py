@@ -19,21 +19,21 @@ STATUS_MAP = {
 }
 
 ACTION_MAP = {
-    "approve-order": "通过审核",
-    "done-for-pickup": "标记待取件",
+    "approve-order": "审核通过",
+    "done-for-pickup": "打印完成",
     "refuse-order": "拒绝订单",
-    "complete-order": "完成订单",
+    "complete-order": "取件完成",
     "record-fail": "登记异常",
     "resign-user": "助管离岗",
     "update-order-price": "修改价格",
     "recall-order": "撤回订单",
     # Fallback types inferred from order tag history when assist-action endpoint is unavailable.
-    "status-wait-for-approval": "状态更新：待审核",
-    "status-printing": "状态更新：打印中",
-    "status-pickup": "状态更新：待取件",
-    "status-complete": "状态更新：已完成",
-    "status-refused": "状态更新：已拒绝",
-    "status-canceled": "状态更新：已取消",
+    "status-wait-for-approval": "待审核",
+    "status-printing": "打印中",
+    "status-pickup": "待取件",
+    "status-complete": "已完成",
+    "status-refused": "已拒绝",
+    "status-canceled": "已取消",
 }
 
 
@@ -254,6 +254,25 @@ def print_type_zh(order: dict[str, Any]) -> str:
     return "未标注"
 
 
+def department_zh(order: dict[str, Any]) -> str:
+    user = order.get("user")
+    if isinstance(user, dict):
+        org = user.get("organize")
+        if isinstance(org, dict):
+            name = str(org.get("name", "")).strip()
+            if name:
+                return maybe_fix_mojibake(name)
+
+    # Some payloads may include organize at top-level
+    org = order.get("organize")
+    if isinstance(org, dict):
+        name = str(org.get("name", "")).strip()
+        if name:
+            return maybe_fix_mojibake(name)
+
+    return "未标注"
+
+
 def filter_3d_assist(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
     out = []
     for row in actions:
@@ -270,6 +289,17 @@ def filter_3d_assist(actions: list[dict[str, Any]]) -> list[dict[str, Any]]:
         if is_3d_order(fallback_order):
             out.append(row)
     return out
+
+
+def normalize_operator_payload(operator: Any) -> dict[str, Any] | None:
+    if isinstance(operator, dict):
+        return operator
+    if operator is None:
+        return None
+    text = str(operator).strip()
+    if not text:
+        return None
+    return {"nickname": text}
 
 
 def extract_operator_name(operator: Any) -> str:
@@ -351,6 +381,69 @@ def build_actions_from_order_tags(orders: list[dict[str, Any]]) -> list[dict[str
     return out
 
 
+def build_actions_from_order_history(orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    out: list[dict[str, Any]] = []
+    for order in orders:
+        if not isinstance(order, dict):
+            continue
+        history = order.get("actions")
+        if not isinstance(history, list):
+            continue
+
+        order_show_id = str(order.get("show_id") or order.get("id") or "")
+        process_type = order.get("process_type")
+        process_cfg = order.get("process_config")
+
+        for idx, item in enumerate(history, start=1):
+            if not isinstance(item, dict):
+                continue
+            action_type = str(
+                item.get("action_type")
+                or item.get("action")
+                or item.get("type")
+                or item.get("status")
+                or ""
+            ).strip().lower()
+            status = str(item.get("status") or order.get("status") or "").strip().lower()
+            if not action_type and status:
+                action_type = f"status-{status}"
+            if not action_type:
+                continue
+
+            timestamp = str(
+                item.get("create_at")
+                or item.get("created_at")
+                or item.get("time")
+                or order.get("update_at")
+                or order.get("create_at")
+                or ""
+            )
+
+            operator_payload = normalize_operator_payload(item.get("operator"))
+            if operator_payload is None:
+                operator_payload = normalize_operator_payload(item.get("admin"))
+            if operator_payload is None:
+                name = extract_operator_name(item.get("operator") or item.get("admin"))
+                if name:
+                    operator_payload = {"nickname": name}
+
+            out.append(
+                {
+                    "id": item.get("id") or f"hist-{order_show_id}-{idx}-{action_type}-{timestamp}",
+                    "action_type": action_type,
+                    "create_at": timestamp,
+                    "operator": operator_payload,
+                    "operated_orders": [
+                        {
+                            "process_type": item.get("process_type") or process_type,
+                            "process_config": item.get("process_config") or process_cfg,
+                        }
+                    ],
+                }
+            )
+    return out
+
+
 def dedupe_orders(orders: list[dict[str, Any]]) -> list[dict[str, Any]]:
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
@@ -409,12 +502,15 @@ def build_3d_dataset(
         all_actions = []
     actions = filter_3d_assist([x for x in all_actions if isinstance(x, dict)])
     if not actions:
+        actions = build_actions_from_order_history(orders)
+    if not actions:
         actions = build_actions_from_order_tags(orders)
     actions = dedupe_actions(actions)
 
     order_status = Counter()
     order_purpose = Counter()
     order_print_type = Counter()
+    order_dept = Counter()
     order_daily = Counter()
     recent_orders = []
 
@@ -424,6 +520,9 @@ def build_3d_dataset(
 
         pf = process_for_zh(o)
         order_purpose[pf] += 1
+
+        dept = department_zh(o)
+        order_dept[dept] += 1
 
         pt = print_type_zh(o)
         order_print_type[pt] += 1
@@ -445,6 +544,13 @@ def build_3d_dataset(
     recent_orders.sort(key=lambda x: x["创建时间"], reverse=True)
     recent_orders = recent_orders[:8]
 
+    # Build action-update daily trend from order update_at (independent of assist-action date range).
+    action_update_daily: Counter[str] = Counter()
+    for o in orders:
+        d = parse_date(o.get("update_at"))
+        if d:
+            action_update_daily[d] += 1
+
     action_type = Counter()
     action_daily = Counter()
     recent_actions = []
@@ -463,14 +569,14 @@ def build_3d_dataset(
 
         recent_actions.append(
             {
-                "操作类型": tp,
+                "操作详情": tp,
                 "操作人": op_name,
                 "时间": str(a.get("create_at", "")),
             }
         )
 
     recent_actions.sort(key=lambda x: x["时间"], reverse=True)
-    recent_actions = recent_actions[:8]
+    recent_actions = recent_actions[:10]
 
     sorted_dates = sorted(order_daily.keys())
     start_date = sorted_dates[0] if sorted_dates else ""
@@ -499,11 +605,12 @@ def build_3d_dataset(
         "指标卡": cards,
         "趋势": {
             "3D订单日趋势": daily_counter_to_list(order_daily),
-            "3D助管操作日趋势": daily_counter_to_list(action_daily),
+            "3D订单操作日趋势": daily_counter_to_list(action_update_daily),
         },
         "分布": {
             "订单状态": counter_to_list(order_status),
             "订单用途": counter_to_list(order_purpose),
+            "学院分布": counter_to_list(order_dept),
             "打印工艺": counter_to_list(order_print_type),
             "助管操作类型": counter_to_list(action_type),
         },
@@ -725,11 +832,11 @@ def html_template(payload_json: str) -> str:
     <section class=\"main\">
       <section class=\"charts\">
         <div class=\"panel\"><h3>3D订单日趋势</h3><div class=\"chart\" id=\"c_order_trend\"></div></div>
-        <div class=\"panel\"><h3>3D助管操作日趋势</h3><div class=\"chart\" id=\"c_action_trend\"></div></div>
+        <div class=\"panel\"><h3>3D订单操作日趋势</h3><div class=\"chart\" id=\"c_action_trend\"></div></div>
         <div class=\"panel\"><h3>订单状态分布</h3><div class=\"chart\" id=\"c_status\"></div></div>
         <div class=\"panel\"><h3>打印工艺分布</h3><div class=\"chart\" id=\"c_print\"></div></div>
         <div class=\"panel\"><h3>订单用途分布</h3><div class=\"chart\" id=\"c_purpose\"></div></div>
-        <div class=\"panel\"><h3>助管操作类型分布</h3><div class=\"chart\" id=\"c_action_type\"></div></div>
+        <div class=\"panel\"><h3>学院分布</h3><div class=\"chart\" id=\"c_department\"></div></div>
       </section>
 
       <section class=\"tables\">
@@ -755,13 +862,13 @@ def html_template(payload_json: str) -> str:
 
     function lineChart(id, list, color) {{
       const chart = getChart(id);
-      const x = (list || []).map(i => i.date);
+      const x = (list || []).map(i => (i.date || "").replace(/^\\d{{4}}-/, ""));
       const y = (list || []).map(i => i.count);
       chart.setOption({{
         animation: false,
         grid: {{left: 38, right: 8, top: 22, bottom: 26}},
         tooltip: {{trigger: "axis"}},
-        xAxis: {{type: "category", data: x, axisLabel: {{color: "#5f7084", fontSize: 10, interval: Math.max(0, Math.floor(x.length / 8))}}}},
+        xAxis: {{type: "category", data: x, axisLabel: {{color: "#5f7084", fontSize: 10, interval: "auto", rotate: 30}}}},
         yAxis: {{type: "value", axisLabel: {{color: "#5f7084", fontSize: 10}}, splitLine: {{lineStyle: {{color: "rgba(15,34,56,.08)"}}}}}},
         series: [{{
           type: "line",
@@ -850,14 +957,14 @@ def html_template(payload_json: str) -> str:
       const tables = data["表格"] || {{}};
 
       lineChart("c_order_trend", trends["3D订单日趋势"] || [], "#ff5a36");
-      lineChart("c_action_trend", trends["3D助管操作日趋势"] || [], "#1f8ed8");
+      lineChart("c_action_trend", trends["3D订单操作日趋势"] || [], "#1f8ed8");
       pieChart("c_status", dist["订单状态"] || []);
       pieChart("c_print", dist["打印工艺"] || []);
       barChart("c_purpose", dist["订单用途"] || [], "#3f9142");
-      barChart("c_action_type", dist["助管操作类型"] || [], "#2d80c2");
+      barChart("c_department", dist["学院分布"] || [], "#2d80c2");
 
       drawTable("t_orders", tables["最近3D订单"] || [], 8);
-      drawTable("t_actions", tables["最近3D助管操作"] || [], 8);
+      drawTable("t_actions", tables["最近3D助管操作"] || [], 10);
     }}
 
     function calcVersion(data) {{
@@ -913,6 +1020,32 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
         raise RuntimeError(f"未找到可用 JSON 数据文件: {source_path}")
 
     results = pick_endpoint_results(files)
+
+    assist_override = None
+    if source_type == "filters":
+        candidate = source_path / "assist_latest.json"
+        if candidate.exists():
+            assist_override = candidate
+    else:
+        candidate = source_path.parent / "assist_latest.json"
+        if candidate.exists():
+            assist_override = candidate
+
+    if assist_override is not None:
+        try:
+            data = read_json(assist_override)
+            if isinstance(data, dict) and isinstance(data.get("result"), list):
+                extra = data["result"]
+                existing = results.get("assist_action")
+                if isinstance(existing, list):
+                    seen_ids = {a.get("id") for a in existing if isinstance(a, dict) and a.get("id")}
+                    for item in extra:
+                        if isinstance(item, dict) and item.get("id") not in seen_ids:
+                            existing.append(item)
+                else:
+                    results["assist_action"] = extra
+        except Exception:
+            pass
     payload = build_3d_dataset(source_type, source_path, summary_items, results)
 
     # Fallback: if current run misses core order-list data, use latest valid historical run.

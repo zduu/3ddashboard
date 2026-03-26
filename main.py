@@ -2,10 +2,12 @@ import argparse
 import csv
 import json
 import re
+import shutil
 import sys
-from datetime import datetime
+from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlencode, urlparse, parse_qs, urlunparse
 
 from playwright.sync_api import Page, sync_playwright
 from dashboard_builder import build_dashboard
@@ -14,11 +16,14 @@ DEFAULT_BROWSER_CHANNEL = "auto"
 
 
 DEFAULT_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/order-count"
+ASSIST_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/assist-action"
+ASSIST_API_URL = "https://make.sjtu.edu.cn/api/statistics/assist-action"
 DEFAULT_STATE_PATH = Path("state/auth_state.json")
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_DASHBOARD_DIR = Path("dashboard")
 DEFAULT_WAIT_MS = 10000
 DEFAULT_FILTER_WAIT_MS = 3500
+IGNORED_CAPTURE_PATTERNS = []
 
 
 def ensure_parent_dir(path: Path) -> None:
@@ -179,6 +184,39 @@ def launch_browser(p, headless: bool, channel: str | None):
     raise last_error if last_error else RuntimeError("Unable to launch browser")
 
 
+def fetch_assist_actions(
+    assist_api_url: str,
+    state_path: Path,
+    output_dir: Path,
+) -> Path | None:
+    if not state_path.exists():
+        raise FileNotFoundError(f"State file not found: {state_path}")
+
+    today = datetime.now().date().isoformat()
+    params = urlencode(
+        {
+            "process_type": "thdprint",
+            "start_date": today,
+            "end_date": today,
+        }
+    )
+    url = f"{assist_api_url}?{params}"
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / f"assist_api_{now_tag()}.json"
+
+    with sync_playwright() as p:
+        request_context = p.request.new_context(storage_state=str(state_path))
+        print(f"[INFO] Fetching assist actions via request: {url}")
+        resp = request_context.get(url)
+        resp.raise_for_status()
+        data = resp.json()
+
+    with dest.open("w", encoding="utf-8") as f:
+        json.dump(data, f, ensure_ascii=False, indent=2)
+    return dest
+
+
 def capture_data(
     page_url: str,
     state_path: Path,
@@ -186,6 +224,7 @@ def capture_data(
     wait_ms: int,
     headless: bool,
     browser_channel: str | None,
+    label: str,
 ) -> tuple[Path, Path]:
     if not state_path.exists():
         raise FileNotFoundError(
@@ -203,6 +242,8 @@ def capture_data(
         def on_response(resp: Any) -> None:
             if resp.request.resource_type not in {"xhr", "fetch"}:
                 return
+            if any(pattern in resp.url for pattern in IGNORED_CAPTURE_PATTERNS):
+                return
             records.append(build_record(resp))
 
         page.on("response", on_response)
@@ -214,8 +255,9 @@ def capture_data(
         raise RuntimeError("No XHR/Fetch responses captured. Check login and page access.")
 
     tag = now_tag()
-    json_file = output_dir / f"responses_{tag}.json"
-    csv_file = output_dir / f"responses_{tag}.csv"
+    prefix = safe_slug(label)
+    json_file = output_dir / f"responses_{prefix}_{tag}.json"
+    csv_file = output_dir / f"responses_{prefix}_{tag}.csv"
     write_records(records, json_file, csv_file)
     return json_file, csv_file
 
@@ -367,8 +409,26 @@ def capture_data_by_filters(
                 return
             if current_bucket is None:
                 return
+            if any(pattern in resp.url for pattern in IGNORED_CAPTURE_PATTERNS):
+                return
             current_bucket.append(build_record(resp))
 
+        def rewrite_assist_date(route: Any) -> None:
+            """Rewrite assist-action requests to query today only."""
+            request = route.request
+            parsed = urlparse(request.url)
+            if "/api/statistics/assist-action" in parsed.path:
+                today = datetime.now().date().isoformat()
+                qs = parse_qs(parsed.query)
+                qs["start_date"] = [today]
+                qs["end_date"] = [today]
+                new_query = urlencode({k: v[0] for k, v in qs.items()})
+                new_url = urlunparse(parsed._replace(query=new_query))
+                route.continue_(url=new_url)
+            else:
+                route.continue_()
+
+        page.route("**/api/statistics/assist-action*", rewrite_assist_date)
         page.on("response", on_response)
 
         summary_items: list[dict[str, Any]] = []
@@ -504,7 +564,17 @@ def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
         description="Capture authenticated data from SJTU make platform page."
     )
-    parser.add_argument("--page-url", default=DEFAULT_PAGE_URL, help="Target page URL.")
+    parser.add_argument("--page-url", default=DEFAULT_PAGE_URL, help="Order statistics page URL.")
+    parser.add_argument(
+        "--assist-page-url",
+        default=ASSIST_PAGE_URL,
+        help="Assist action statistics page URL.",
+    )
+    parser.add_argument(
+        "--assist-api-url",
+        default=ASSIST_API_URL,
+        help="Assist action API URL for direct fetch.",
+    )
     parser.add_argument(
         "--state-path",
         default=str(DEFAULT_STATE_PATH),
@@ -580,8 +650,49 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def cleanup_old_runs(output_dir: Path, keep: int = 3) -> None:
+    """Remove old filter/response runs, keeping only the most recent *keep*."""
+    runs = sorted(
+        [p for p in output_dir.iterdir() if p.is_dir() and p.name.startswith("filters_")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in runs[keep:]:
+        try:
+            shutil.rmtree(old)
+            print(f"[CLEAN] Removed old run: {old.name}")
+        except Exception as e:
+            print(f"[WARN] Failed to remove {old.name}: {e}")
+
+    singles = sorted(
+        [p for p in output_dir.iterdir() if p.is_file() and p.name.startswith("responses_")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in singles[keep * 2:]:
+        try:
+            old.unlink()
+            print(f"[CLEAN] Removed old file: {old.name}")
+        except Exception as e:
+            print(f"[WARN] Failed to remove {old.name}: {e}")
+
+    assist_files = sorted(
+        [p for p in output_dir.iterdir() if p.is_file() and p.name.startswith("assist_api_")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in assist_files[keep:]:
+        try:
+            old.unlink()
+            print(f"[CLEAN] Removed old file: {old.name}")
+        except Exception as e:
+            print(f"[WARN] Failed to remove {old.name}: {e}")
+
+
 def run_fetch(
     page_url: str,
+    assist_page_url: str,
+    assist_api_url: str,
     state_path: Path,
     output_dir: Path,
     dashboard_dir: Path,
@@ -593,6 +704,8 @@ def run_fetch(
     single: bool,
     generate_dashboard: bool,
 ) -> int:
+    orders_path: Path | None = None
+
     if single:
         json_file, csv_file = capture_data(
             page_url=page_url,
@@ -601,27 +714,58 @@ def run_fetch(
             wait_ms=wait_ms,
             headless=headless,
             browser_channel=browser_channel,
+            label="orders",
         )
         print(f"[OK] JSON saved: {json_file}")
         print(f"[OK] CSV saved:  {csv_file}")
-        if generate_dashboard:
-            refresh_dashboard(output_dir, dashboard_dir, json_file)
-        return 0
+        orders_path = json_file
+    else:
+        summary_json, summary_csv = capture_data_by_filters(
+            page_url=page_url,
+            state_path=state_path,
+            output_dir=output_dir,
+            wait_ms=wait_ms,
+            filter_wait_ms=filter_wait_ms,
+            headless=headless,
+            browser_channel=browser_channel,
+            filter_selector=filter_selector,
+        )
+        print(f"[OK] Summary JSON saved: {summary_json}")
+        print(f"[OK] Summary CSV saved:  {summary_csv}")
+        orders_path = summary_json.parent
 
-    summary_json, summary_csv = capture_data_by_filters(
-        page_url=page_url,
-        state_path=state_path,
-        output_dir=output_dir,
-        wait_ms=wait_ms,
-        filter_wait_ms=filter_wait_ms,
-        headless=headless,
-        browser_channel=browser_channel,
-        filter_selector=filter_selector,
-    )
-    print(f"[OK] Summary JSON saved: {summary_json}")
-    print(f"[OK] Summary CSV saved:  {summary_csv}")
-    if generate_dashboard:
-        refresh_dashboard(output_dir, dashboard_dir, summary_json.parent)
+    assist_json: Path | None = None
+    try:
+        assist_json = fetch_assist_actions(
+            assist_api_url=assist_api_url,
+            state_path=state_path,
+            output_dir=output_dir,
+        )
+        if assist_json:
+            print(f"[OK] Assist JSON saved: {assist_json}")
+    except Exception as assist_err:
+        print(f"[WARN] Assist-action capture failed: {assist_err}")
+
+    if assist_json and orders_path is not None:
+        target = orders_path if orders_path.is_dir() else orders_path.parent
+        latest_path = target / "assist_latest.json"
+        try:
+            shutil.copy2(assist_json, latest_path)
+        except Exception as copy_err:
+            print(f"[WARN] Failed to store assist data alongside run: {copy_err}")
+
+        dest = target / "04_u52a9u7ba1u7edfu8ba1.json"
+        try:
+            shutil.copy2(assist_json, dest)
+        except Exception as copy_err:
+            print(f"[WARN] Failed to store {dest.name}: {copy_err}")
+
+    if generate_dashboard and orders_path is not None:
+        refresh_dashboard(output_dir, dashboard_dir, orders_path)
+
+    # Keep only the 3 most recent runs in output_dir.
+    cleanup_old_runs(output_dir, keep=3)
+
     return 0
 
 
@@ -642,6 +786,8 @@ def main() -> int:
                 print("[AUTO] Found saved session, running filter traversal fetch.")
                 return run_fetch(
                     page_url=args.page_url,
+                    assist_page_url=args.assist_page_url,
+                    assist_api_url=args.assist_api_url,
                     state_path=state_path,
                     output_dir=output_dir,
                     dashboard_dir=dashboard_dir,
@@ -658,6 +804,8 @@ def main() -> int:
             save_login_state(args.page_url, state_path, channel)
             return run_fetch(
                 page_url=args.page_url,
+                assist_page_url=args.assist_page_url,
+                assist_api_url=args.assist_api_url,
                 state_path=state_path,
                 output_dir=output_dir,
                 dashboard_dir=dashboard_dir,
@@ -677,6 +825,8 @@ def main() -> int:
         if args.command == "fetch":
             return run_fetch(
                 page_url=args.page_url,
+                assist_page_url=args.assist_page_url,
+                assist_api_url=args.assist_api_url,
                 state_path=state_path,
                 output_dir=output_dir,
                 dashboard_dir=dashboard_dir,
@@ -693,6 +843,8 @@ def main() -> int:
             save_login_state(args.page_url, state_path, channel)
             return run_fetch(
                 page_url=args.page_url,
+                assist_page_url=args.assist_page_url,
+                assist_api_url=args.assist_api_url,
                 state_path=state_path,
                 output_dir=output_dir,
                 dashboard_dir=dashboard_dir,

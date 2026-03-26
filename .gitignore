@@ -6,4 +6,7 @@ state/
 dashboard/
 .vscode/
 logs/
+.venv
+dist/
+build/
 PY_PATH.txt
