@@ -488,6 +488,42 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
+def show_error_dialog(title: str, message: str) -> None:
+    """Show an error dialog visible to the user (before logging redirect)."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showerror(title, message)
+        root.destroy()
+    except Exception:
+        pass
+
+
+def ensure_login(args: argparse.Namespace, cwd: Path) -> bool:
+    """Ensure login state exists BEFORE entering background mode.
+
+    Returns True if state is ready, False if login failed.
+    """
+    state_path = (cwd / args.state_path).resolve()
+    if has_usable_state(state_path):
+        return True
+
+    # No state — run login with visible browser (not in background yet).
+    print(f"[{now_str()}] [SYS] No login state found, launching browser for login...")
+    try:
+        code = run_main_command(args, cwd, ["login"], interactive=True)
+        if code == 0 and has_usable_state(state_path):
+            return True
+    except Exception as e:
+        show_error_dialog("登录失败", f"登录过程出错：{e}")
+        return False
+
+    show_error_dialog("登录失败", "未检测到有效登录状态，请重新运行并完成登录。")
+    return False
+
+
 def main() -> int:
     args = build_parser().parse_args()
     cwd = Path(__file__).resolve().parent
@@ -503,6 +539,11 @@ def main() -> int:
             (cwd / SIGNAL_STOP).write_text("", encoding="utf-8")
         return 0
 
+    # Step 1: Ensure login BEFORE going silent — browser must be visible.
+    if not ensure_login(args, cwd):
+        return 1
+
+    # Step 2: Now go into background mode — redirect output to log file.
     setup_logging(cwd)
     write_pid(cwd)
 
