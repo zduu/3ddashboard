@@ -511,16 +511,15 @@ def ensure_login(args: argparse.Namespace, cwd: Path) -> bool:
         return True
 
     # No state — run login with visible browser (not in background yet).
-    print(f"[{now_str()}] [SYS] No login state found, launching browser for login...")
     try:
         code = run_main_command(args, cwd, ["login"], interactive=True)
         if code == 0 and has_usable_state(state_path):
             return True
+        # Login returned but state is not valid — user may have closed browser
+        # before completing login.
+        show_error_dialog("登录失败", "未检测到有效登录状态。\n请重新运行，在浏览器中完成登录后再关闭浏览器。")
     except Exception as e:
-        show_error_dialog("登录失败", f"登录过程出错：{e}")
-        return False
-
-    show_error_dialog("登录失败", "未检测到有效登录状态，请重新运行并完成登录。")
+        show_error_dialog("登录失败", f"浏览器启动或登录过程出错：\n{e}")
     return False
 
 

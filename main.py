@@ -55,23 +55,27 @@ def safe_slug(text: str) -> str:
 def save_login_state(page_url: str, state_path: Path, browser_channel: str | None) -> None:
     ensure_parent_dir(state_path)
     with sync_playwright() as p:
-        launch_args: dict[str, Any] = {"headless": False}
-        if browser_channel:
-            launch_args["channel"] = browser_channel
-
-        browser = p.chromium.launch(**launch_args)
+        browser = launch_browser(p, headless=False, channel=browser_channel)
         context = browser.new_context()
         page = context.new_page()
         page.goto(page_url, wait_until="domcontentloaded")
 
-        print("=" * 72)
-        print("Please finish login in the opened browser window.")
-        print("After you can see the target page content, return here and press Enter.")
-        print("=" * 72)
-        input()
+        print("[INFO] Browser opened. Please login, then CLOSE the browser to continue.")
+        # Block until user closes the browser window.
+        try:
+            page.wait_for_event("close", timeout=600_000)  # 10 min max
+        except Exception:
+            pass
 
-        context.storage_state(path=str(state_path))
-        browser.close()
+        try:
+            context.storage_state(path=str(state_path))
+        except Exception:
+            pass
+
+        try:
+            browser.close()
+        except Exception:
+            pass
 
     print(f"[OK] Login session saved: {state_path}")
 
