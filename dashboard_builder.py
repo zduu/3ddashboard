@@ -5,7 +5,7 @@ import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
-from typing import Any
+from typing import Any, Callable
 
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_DASHBOARD_DIR = Path("dashboard")
@@ -509,6 +509,23 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
       frame.appendChild(stage);
       stage.appendChild(wrap);
       return {frame, stage, wrap};
+    }
+
+    function clearFixedScaleStage() {
+      const frame = document.querySelector(".dashboard-frame");
+      const stage = document.querySelector(".dashboard-stage");
+      const wrap = document.querySelector(".wrap");
+      if (frame && stage && wrap && wrap.parentNode === stage && frame.parentNode) {
+        frame.parentNode.insertBefore(wrap, frame);
+        frame.remove();
+      }
+      document.body.classList.remove("fixed-scale-mode");
+      document.documentElement.style.removeProperty("--stage-scale");
+      if (wrap) {
+        wrap.style.width = "";
+        wrap.style.height = "";
+        wrap.style.minHeight = "";
+      }
     }
 
     function syncFixedScaleStage() {
@@ -1253,7 +1270,12 @@ def build_3d_dataset(
     }
 
 
-def html_template(payload_json: str, template_path: Path | None = None) -> str:
+def render_template(
+    payload_json: str,
+    template_path: Path | None = None,
+    fallback_templates: list[Path] | None = None,
+    transform_template: Callable[[str], str] | None = None,
+) -> str:
     candidates: list[Path] = []
 
     def append_candidate(path: Path | None) -> None:
@@ -1264,12 +1286,11 @@ def html_template(payload_json: str, template_path: Path | None = None) -> str:
         candidates.append(path)
 
     bundled_root = getattr(sys, "_MEIPASS", "")
-    if bundled_root:
-        append_candidate(Path(bundled_root) / "index_example.html")
-
     append_candidate(template_path)
-    append_candidate(Path("index_example.html"))
-    append_candidate(DEFAULT_DASHBOARD_DIR / "index.html")
+    for fallback_template in fallback_templates or []:
+        if bundled_root:
+            append_candidate(Path(bundled_root) / fallback_template.name)
+        append_candidate(fallback_template)
 
     template_text: str | None = None
     for path in candidates:
@@ -1282,7 +1303,8 @@ def html_template(payload_json: str, template_path: Path | None = None) -> str:
             "未找到 HTML 模板文件，请先准备 index_example.html 或 dashboard/index.html 后再生成看板。"
         )
 
-    template_text = inject_resolution_adaptation(template_text)
+    if transform_template is not None:
+        template_text = transform_template(template_text)
 
     pattern = re.compile(
         r"const EMBEDDED_DATA = .*?;\n(\s*const IS_FILE_PROTOCOL = )",
@@ -1296,6 +1318,27 @@ def html_template(payload_json: str, template_path: Path | None = None) -> str:
     if count != 1:
         raise RuntimeError("HTML 模板中未找到 EMBEDDED_DATA 注入点。")
     return rendered
+
+
+def html_template(payload_json: str, template_path: Path | None = None) -> str:
+    return render_template(
+        payload_json,
+        template_path=template_path,
+        fallback_templates=[
+            Path("index_example.html"),
+            DEFAULT_DASHBOARD_DIR / "index.html",
+        ],
+        transform_template=inject_resolution_adaptation,
+    )
+
+
+def simple_html_template(payload_json: str, template_path: Path | None = None) -> str:
+    return render_template(
+        payload_json,
+        template_path=template_path,
+        fallback_templates=[Path("simple_example.html")],
+        transform_template=None,
+    )
 
 
 def replace_once(text: str, old: str, new: str, error_message: str) -> str:
@@ -1332,8 +1375,13 @@ def inject_resolution_adaptation(template_text: str) -> str:
         "      }\n"
         "    }\n",
         "    function applyViewportMode() {\n"
-        "      syncFixedScaleStage();\n"
-        "      syncDashboardLayout();\n"
+        "      if (isFullscreenLike()) {\n"
+        "        syncFixedScaleStage();\n"
+        "        syncDashboardLayout();\n"
+        "        return;\n"
+        "      }\n"
+        "      clearFixedScaleStage();\n"
+        "      clearDashboardLayout();\n"
         "    }\n",
         "HTML 模板中未找到视口模式函数，无法切换到固定比例缩放模式。",
     )
@@ -1427,8 +1475,14 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
     dashboard_dir.mkdir(parents=True, exist_ok=True)
     data_path = dashboard_dir / "data.json"
     html_path = dashboard_dir / "index.html"
+    simple_dir = dashboard_dir / "simple"
+    simple_dir.mkdir(parents=True, exist_ok=True)
+    simple_data_path = simple_dir / "data.json"
+    simple_html_path = simple_dir / "index.html"
 
     with data_path.open("w", encoding="utf-8") as f:
+        json.dump(payload, f, ensure_ascii=False, indent=2)
+    with simple_data_path.open("w", encoding="utf-8") as f:
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     payload_json = json.dumps(payload, ensure_ascii=False).replace("</script>", "<\\/script>")
@@ -1437,6 +1491,12 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
     html = html_template(payload_json, template_path=preferred_template)
     with html_path.open("w", encoding="utf-8") as f:
         f.write(html)
+
+    simple_example_template = Path("simple_example.html")
+    preferred_simple_template = simple_example_template if simple_example_template.exists() else None
+    simple_html = simple_html_template(payload_json, template_path=preferred_simple_template)
+    with simple_html_path.open("w", encoding="utf-8") as f:
+        f.write(simple_html)
 
     return html_path, data_path
 
@@ -1459,6 +1519,8 @@ def main() -> int:
         html_file, data_file = build_dashboard(output_dir=out, dashboard_dir=dash, run_path=run_path)
         print(f"[OK] Dashboard HTML: {html_file}")
         print(f"[OK] Dashboard data: {data_file}")
+        print(f"[OK] Simple Dashboard HTML: {dash / 'simple' / 'index.html'}")
+        print(f"[OK] Simple Dashboard data: {dash / 'simple' / 'data.json'}")
         return 0
     except Exception as e:
         print(f"[ERROR] {e}")

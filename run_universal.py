@@ -127,10 +127,11 @@ def show_control_dialog(cwd: Path) -> str | None:
 def ensure_dashboard_placeholder(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     index_file = directory / "index.html"
-    if index_file.exists():
-        return
-    index_file.write_text(
-        """<!doctype html>
+    simple_dir = directory / "simple"
+    simple_dir.mkdir(parents=True, exist_ok=True)
+    simple_index_file = simple_dir / "index.html"
+
+    placeholder_html = """<!doctype html>
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
@@ -149,9 +150,11 @@ def ensure_dashboard_placeholder(directory: Path) -> None:
   </div>
 </body>
 </html>
-""",
-        encoding="utf-8",
-    )
+"""
+    if not index_file.exists():
+        index_file.write_text(placeholder_html, encoding="utf-8")
+    if not simple_index_file.exists():
+        simple_index_file.write_text(placeholder_html, encoding="utf-8")
 
 
 class LogHandler(SimpleHTTPRequestHandler):
@@ -167,6 +170,8 @@ class LogHandler(SimpleHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
+        if self.path == "/simple":
+            self.path = "/simple/"
         super().do_GET()
 
     def log_message(self, format: str, *args: object) -> None:

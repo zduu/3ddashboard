@@ -35,6 +35,8 @@ class LogHandler(SimpleHTTPRequestHandler):
             self.send_response(204)
             self.end_headers()
             return
+        if self.path == "/simple":
+            self.path = "/simple/"
         super().do_GET()
 
     def log_message(self, format: str, *args: object) -> None:

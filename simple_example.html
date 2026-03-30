@@ -1,0 +1,696 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D打印四分屏简版</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    :root {
+      --bg-a: #eff7ff;
+      --bg-b: #fff0de;
+      --ink: #10273c;
+      --muted: #607286;
+      --card: rgba(255,255,255,.86);
+      --line: rgba(16,39,60,.12);
+      --accent-1: #ff6a3d;
+      --accent-2: #1e84d4;
+      --accent-3: #2d78bf;
+      --shadow: 0 12px 28px rgba(10,31,58,.10);
+      --outer-pad: 18px;
+      --seam-pad: 26px;
+      --quad-gap: 0px;
+      --panel-pad: 10px;
+      --panel-radius: 14px;
+      --stage-scale: 1;
+    }
+    * { box-sizing: border-box; }
+    html, body { width: 100%; min-height: 100%; }
+    body {
+      margin: 0;
+      overflow: auto;
+      color: var(--ink);
+      font-family: "Noto Sans SC", "Space Grotesk", sans-serif;
+      background:
+        radial-gradient(1000px 480px at 2% -10%, #9fd7ff 0%, transparent 62%),
+        radial-gradient(760px 420px at 100% 0%, #ffd7b2 0%, transparent 60%),
+        linear-gradient(135deg, var(--bg-a), var(--bg-b));
+    }
+    .wrap {
+      width: 100vw;
+      min-height: 100vh;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: var(--quad-gap);
+    }
+    .quad {
+      min-width: 0;
+      min-height: 0;
+      display: flex;
+      flex-direction: column;
+      overflow: visible;
+    }
+    .quad-a { padding: var(--outer-pad) var(--seam-pad) var(--seam-pad) var(--outer-pad); }
+    .quad-b { padding: var(--outer-pad) var(--outer-pad) var(--seam-pad) var(--seam-pad); }
+    .quad-c { padding: var(--seam-pad) var(--seam-pad) var(--outer-pad) var(--outer-pad); }
+    .quad-d { padding: var(--seam-pad) var(--outer-pad) var(--outer-pad) var(--seam-pad); }
+    .panel {
+      min-height: 0;
+      height: 100%;
+      display: grid;
+      grid-template-rows: auto auto minmax(0, 1fr);
+      padding: var(--panel-pad);
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--panel-radius);
+      box-shadow: var(--shadow);
+      backdrop-filter: blur(8px);
+    }
+    .panel-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 6px;
+    }
+    .title {
+      margin: 0;
+      font-size: clamp(24px, 2vw, 34px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+    }
+    .meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin: 0 0 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+    .pill {
+      padding: 2px 9px;
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      background: rgba(255,255,255,.7);
+      white-space: nowrap;
+    }
+    h2 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+    }
+    .sub {
+      color: var(--muted);
+      font-size: 12px;
+      text-align: right;
+      white-space: nowrap;
+    }
+    .chart {
+      min-height: 320px;
+      height: 100%;
+      width: 100%;
+      position: relative;
+      overflow: visible;
+      isolation: isolate;
+      z-index: 20;
+    }
+    .chart > div,
+    .chart canvas,
+    .chart svg {
+      position: relative;
+      z-index: 20 !important;
+    }
+    .table-wrap {
+      min-height: 0;
+      height: 100%;
+      overflow: auto;
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      table-layout: fixed;
+      font-size: 21px;
+    }
+    th, td {
+      text-align: left;
+      padding: 10px 12px;
+      border-bottom: 1px dashed var(--line);
+      vertical-align: top;
+      overflow-wrap: anywhere;
+      word-break: break-word;
+    }
+    th {
+      color: var(--muted);
+      font-weight: 500;
+    }
+    .empty {
+      color: #7f8fa0;
+      padding: 12px 4px;
+      font-size: 20px;
+    }
+    .global-echart-tooltip {
+      z-index: 2147483647 !important;
+      pointer-events: none !important;
+      font-size: calc(12px * var(--stage-scale, 1)) !important;
+    }
+
+    body.fixed-scale-mode {
+      display: flex;
+      justify-content: center;
+      align-items: flex-start;
+      overflow: auto !important;
+    }
+    .dashboard-frame {
+      position: relative;
+      flex: 0 0 auto;
+    }
+    .dashboard-stage {
+      position: absolute;
+      left: 0;
+      top: 0;
+      transform-origin: top left;
+      will-change: transform;
+    }
+    body.fixed-scale-mode .wrap {
+      width: 2048px !important;
+      min-height: 1152px !important;
+      height: 1152px !important;
+      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
+    }
+    body.fixed-scale-mode .quad {
+      overflow: hidden !important;
+    }
+    body.fixed-scale-mode .panel {
+      height: 100%;
+    }
+    body.fixed-scale-mode .chart {
+      min-height: 0 !important;
+      height: 100% !important;
+    }
+    body.fixed-scale-mode .table-wrap {
+      height: 100% !important;
+      overflow: hidden !important;
+    }
+
+    body.fullscreen-mode {
+      overflow: hidden;
+    }
+    body.fullscreen-mode .wrap {
+      height: 100vh;
+      min-height: 0;
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+    }
+    body.fullscreen-mode .quad {
+      overflow: hidden;
+    }
+    body.fullscreen-mode .panel {
+      height: 100%;
+    }
+    body.fullscreen-mode .table-wrap {
+      overflow: hidden;
+    }
+
+    @media (max-width: 1200px), (max-height: 760px) {
+      .wrap {
+        grid-template-columns: 1fr;
+        min-height: 100vh;
+      }
+      .quad {
+        padding: 14px 16px;
+      }
+      .panel {
+        min-height: 420px;
+      }
+      .chart {
+        min-height: 280px;
+      }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="quad quad-a">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="title">3D订单日趋势</h2>
+          <div class="sub" id="sub_trend"></div>
+        </div>
+        <div class="meta">
+          <span class="pill" id="gen"></span>
+          <span class="pill" id="range"></span>
+        </div>
+        <div class="chart" id="c_order_trend"></div>
+      </section>
+    </section>
+
+    <section class="quad quad-b">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="title">订单状态分布</h2>
+          <div class="sub" id="sub_status"></div>
+        </div>
+        <div class="meta">
+          <span class="pill" id="src"></span>
+          <span class="pill" id="latest"></span>
+        </div>
+        <div class="chart" id="c_status"></div>
+      </section>
+    </section>
+
+    <section class="quad quad-c">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="title">学院分布</h2>
+          <div class="sub">保留前5个独立学院</div>
+        </div>
+        <div class="meta">
+          <span class="pill" id="total_orders"></span>
+        </div>
+        <div class="chart" id="c_department"></div>
+      </section>
+    </section>
+
+    <section class="quad quad-d">
+      <section class="panel">
+        <div class="panel-head">
+          <h2 class="title">最近3D订单</h2>
+          <div class="sub" id="sub_table"></div>
+        </div>
+        <div class="meta">
+          <span class="pill">按最近创建时间展示</span>
+        </div>
+        <div class="table-wrap" id="t_orders"></div>
+      </section>
+    </section>
+  </div>
+
+  <script>
+    const EMBEDDED_DATA = {};
+    const IS_FILE_PROTOCOL = window.location.protocol === "file:";
+    const REFRESH_MS = 5 * 60 * 1000;
+    const FIXED_STAGE_WIDTH = 2048;
+    const FIXED_STAGE_HEIGHT = 1152;
+    const chartMap = {};
+    let lastVersion = "";
+
+    function getChart(id) {
+      if (!chartMap[id]) {
+        chartMap[id] = echarts.init(document.getElementById(id));
+      }
+      return chartMap[id];
+    }
+
+    function elevateChartLayer(chart) {
+      try {
+        const dom = chart.getDom();
+        if (dom && dom.style) {
+          dom.style.position = "relative";
+          dom.style.zIndex = "20";
+          dom.style.overflow = "visible";
+        }
+        const zrRoot = chart.getZr && chart.getZr().painter && chart.getZr().painter.getViewportRoot
+          ? chart.getZr().painter.getViewportRoot()
+          : null;
+        if (zrRoot && zrRoot.style) {
+          zrRoot.style.position = "relative";
+          zrRoot.style.zIndex = "20";
+          zrRoot.style.overflow = "visible";
+        }
+      } catch (e) {
+        // Ignore chart DOM promotion failures.
+      }
+      return chart;
+    }
+
+    function wrapAxisLabel(value, step = 8, maxLines = 2) {
+      const text = String(value || "");
+      if (text.length <= step) {
+        return text;
+      }
+      const lines = [];
+      for (let i = 0; i < text.length && lines.length < maxLines; i += step) {
+        lines.push(text.slice(i, i + step));
+      }
+      if (text.length > step * maxLines) {
+        const last = lines.length - 1;
+        lines[last] = lines[last].slice(0, Math.max(lines[last].length - 1, 1)) + "…";
+      }
+      return lines.join("\n");
+    }
+
+    function summarizeDepartments(items, keep = 5) {
+      const rows = Array.isArray(items) ? items.filter(Boolean) : [];
+      const explicit = [];
+      let otherCount = 0;
+      rows.forEach((item) => {
+        const name = String(item.name || "");
+        const count = Number(item.count || 0);
+        if (!name) {
+          return;
+        }
+        if (name === "其余学院" || name === "其他学院") {
+          otherCount += count;
+          return;
+        }
+        explicit.push({ name, count });
+      });
+      explicit.sort((a, b) => b.count - a.count);
+      const kept = explicit.slice(0, keep);
+      otherCount += explicit.slice(keep).reduce((sum, item) => sum + Number(item.count || 0), 0);
+      if (otherCount > 0) {
+        kept.push({ name: "其他学院", count: otherCount });
+      }
+      return kept;
+    }
+
+    function formatTimestampText(value) {
+      const raw = String(value || "").trim();
+      if (!raw) {
+        return "";
+      }
+      const match = raw.match(/^(\d{4}-\d{2}-\d{2})[ T](\d{2}:\d{2})/);
+      if (match) {
+        return `${match[1]} ${match[2]}`;
+      }
+      return raw;
+    }
+
+    function isFullscreenLike() {
+      if (document.fullscreenElement) {
+        return true;
+      }
+      const candidates = [
+        [window.screen.width || 0, window.screen.height || 0],
+        [window.screen.availWidth || 0, window.screen.availHeight || 0],
+      ].filter(([w, h]) => w > 0 && h > 0);
+      return candidates.some(([screenW, screenH]) => {
+        const widthGap = Math.abs(screenW - window.innerWidth);
+        const heightGap = Math.abs(screenH - window.innerHeight);
+        const widthRatio = window.innerWidth / screenW;
+        const heightRatio = window.innerHeight / screenH;
+        return (widthGap <= 80 && heightGap <= 120) || (widthRatio >= 0.95 && heightRatio >= 0.9);
+      });
+    }
+
+    function clearLayout() {
+      document.querySelectorAll(".chart, .table-wrap").forEach((el) => {
+        el.style.height = "";
+      });
+      document.body.classList.remove("fullscreen-mode");
+    }
+
+    function ensureFixedScaleStage() {
+      const wrap = document.querySelector(".wrap");
+      if (!wrap) {
+        return null;
+      }
+      let frame = document.querySelector(".dashboard-frame");
+      let stage = document.querySelector(".dashboard-stage");
+      if (frame && stage) {
+        return {frame, stage, wrap};
+      }
+      frame = document.createElement("div");
+      frame.className = "dashboard-frame";
+      stage = document.createElement("div");
+      stage.className = "dashboard-stage";
+      const parent = wrap.parentNode;
+      parent.insertBefore(frame, wrap);
+      frame.appendChild(stage);
+      stage.appendChild(wrap);
+      return {frame, stage, wrap};
+    }
+
+    function clearFixedScaleStage() {
+      const frame = document.querySelector(".dashboard-frame");
+      const stage = document.querySelector(".dashboard-stage");
+      const wrap = document.querySelector(".wrap");
+      if (frame && stage && wrap && wrap.parentNode === stage && frame.parentNode) {
+        frame.parentNode.insertBefore(wrap, frame);
+        frame.remove();
+      }
+      document.body.classList.remove("fixed-scale-mode");
+      document.documentElement.style.removeProperty("--stage-scale");
+      if (wrap) {
+        wrap.style.width = "";
+        wrap.style.height = "";
+        wrap.style.minHeight = "";
+      }
+    }
+
+    function syncFixedScaleStage() {
+      const refs = ensureFixedScaleStage();
+      if (!refs) {
+        return;
+      }
+      const {frame, stage} = refs;
+      const viewportWidth = Math.max(window.innerWidth || 0, 320);
+      const viewportHeight = Math.max(window.innerHeight || 0, 320);
+      const scale = Math.max(Math.min(viewportWidth / FIXED_STAGE_WIDTH, viewportHeight / FIXED_STAGE_HEIGHT), 0.1);
+      document.body.classList.add("fixed-scale-mode");
+      document.documentElement.style.setProperty("--stage-scale", String(scale));
+      frame.style.width = `${Math.round(FIXED_STAGE_WIDTH * scale)}px`;
+      frame.style.height = `${Math.round(FIXED_STAGE_HEIGHT * scale)}px`;
+      stage.style.width = `${FIXED_STAGE_WIDTH}px`;
+      stage.style.height = `${FIXED_STAGE_HEIGHT}px`;
+      stage.style.transform = `scale(${scale})`;
+    }
+
+    function syncLayout() {
+      document.body.classList.add("fullscreen-mode");
+      document.querySelectorAll(".panel").forEach((panel) => {
+        const title = panel.querySelector(".panel-head");
+        const meta = panel.querySelector(".meta");
+        const body = panel.querySelector(".chart, .table-wrap");
+        if (!title || !meta || !body) {
+          return;
+        }
+        const panelStyle = getComputedStyle(panel);
+        const innerHeight = panel.clientHeight - parseFloat(panelStyle.paddingTop) - parseFloat(panelStyle.paddingBottom);
+        const bodyHeight = Math.max(innerHeight - title.offsetHeight - meta.offsetHeight - 8, body.classList.contains("chart") ? 180 : 160);
+        body.style.height = `${bodyHeight}px`;
+      });
+    }
+
+    function applyViewportMode() {
+      if (isFullscreenLike()) {
+        syncFixedScaleStage();
+        syncLayout();
+        return;
+      }
+      clearFixedScaleStage();
+      clearLayout();
+    }
+
+    function lineChart(id, list) {
+      const chart = getChart(id);
+      chart.setOption({
+        animation: false,
+        grid: {left: 48, right: 16, top: 28, bottom: 42, containLabel: true},
+        tooltip: {
+          trigger: "axis",
+          renderMode: "html",
+          appendToBody: true,
+          confine: false,
+          className: "global-echart-tooltip",
+          extraCssText: "z-index:2147483647;pointer-events:none;"
+        },
+        xAxis: {
+          type: "category",
+          data: (list || []).map((item) => String(item.date || "").replace(/^\d{4}-/, "")),
+          axisLabel: {color: "#607286", fontSize: 12, rotate: 30}
+        },
+        yAxis: {
+          type: "value",
+          axisLabel: {color: "#607286", fontSize: 12},
+          splitLine: {lineStyle: {color: "rgba(16,39,60,.08)"}}
+        },
+        series: [{
+          type: "line",
+          smooth: true,
+          data: (list || []).map((item) => Number(item.count || 0)),
+          symbolSize: 8,
+          areaStyle: {opacity: .14},
+          lineStyle: {width: 3, color: "#ff6a3d"},
+          itemStyle: {color: "#ff6a3d"},
+          label: {show: true, position: "top", color: "#385065", fontSize: 12}
+        }]
+      });
+      return elevateChartLayer(chart);
+    }
+
+    function pieChart(id, items) {
+      const chart = getChart(id);
+      chart.setOption({
+        animation: false,
+        tooltip: {
+          trigger: "item",
+          renderMode: "html",
+          appendToBody: true,
+          confine: false,
+          className: "global-echart-tooltip",
+          extraCssText: "z-index:2147483647;pointer-events:none;"
+        },
+        legend: {
+          bottom: 0,
+          textStyle: {color: "#607286", fontSize: 21}
+        },
+        series: [{
+          type: "pie",
+          radius: ["34%", "70%"],
+          center: ["40%", "40%"],
+          avoidLabelOverlap: true,
+          labelLayout: {hideOverlap: false, moveOverlap: "shiftY"},
+          data: (items || []).map((item) => ({name: item.name, value: item.count})),
+          label: {
+            show: true,
+            formatter: "{b}: {c}",
+            color: "#385065",
+            fontSize: 22,
+            width: 228,
+            overflow: "break",
+            lineHeight: 28
+          },
+          labelLine: {length: 18, length2: 14}
+        }]
+      });
+      return elevateChartLayer(chart);
+    }
+
+    function barChart(id, items) {
+      const chart = getChart(id);
+      chart.setOption({
+        animation: false,
+        grid: {left: 132, right: 32, top: 28, bottom: 32, containLabel: false},
+        tooltip: {
+          trigger: "axis",
+          axisPointer: {type: "shadow"},
+          renderMode: "html",
+          appendToBody: true,
+          confine: false,
+          className: "global-echart-tooltip",
+          extraCssText: "z-index:2147483647;pointer-events:none;"
+        },
+        xAxis: {
+          type: "value",
+          axisLabel: {color: "#607286", fontSize: 12, margin: 14},
+          splitLine: {lineStyle: {color: "rgba(16,39,60,.08)"}}
+        },
+        yAxis: {
+          type: "category",
+          data: (items || []).map((item) => item.name),
+          axisLabel: {
+            color: "#607286",
+            fontSize: 14,
+            width: 136,
+            lineHeight: 18,
+            overflow: "break",
+            formatter: (value) => wrapAxisLabel(value, 8, 2)
+          }
+        },
+        series: [{
+          type: "bar",
+          data: (items || []).map((item) => item.count),
+          itemStyle: {color: "#2d78bf", borderRadius: [0, 8, 8, 0]},
+          label: {show: true, position: "right", color: "#385065", fontSize: 12}
+        }]
+      });
+      return elevateChartLayer(chart);
+    }
+
+    function drawRecentOrders(id, rows, maxRows = 9) {
+      const root = document.getElementById(id);
+      if (!rows || !rows.length) {
+        root.innerHTML = '<div class="empty">暂无数据</div>';
+        return;
+      }
+      const data = rows.slice(0, maxRows).map((row) => ({
+        "订单号": row["订单号"] || "",
+        "状态": row["状态"] || "",
+        "用途": row["用途"] || "",
+        "工艺": row["工艺"] || "",
+        "创建时间": formatTimestampText(row["创建时间"] || "")
+      }));
+      const cols = Object.keys(data[0]);
+      const thead = "<thead><tr>" + cols.map((col) => `<th>${col}</th>`).join("") + "</tr></thead>";
+      const tbody = "<tbody>" + data.map((row) => "<tr>" + cols.map((col) => `<td>${row[col] ?? ""}</td>`).join("") + "</tr>").join("") + "</tbody>";
+      root.innerHTML = `<table>${thead}${tbody}</table>`;
+    }
+
+    function calcVersion(data) {
+      const meta = data["元信息"] || {};
+      return `${meta["生成时间"] || ""}|${meta["最新统计日期"] || ""}|${JSON.stringify(data["指标卡"] || {})}`;
+    }
+
+    function renderDashboard(data) {
+      const meta = data["元信息"] || {};
+      const cards = data["指标卡"] || {};
+      const trends = data["趋势"] || {};
+      const dist = data["分布"] || {};
+      const tables = data["表格"] || {};
+
+      document.getElementById("gen").textContent = "生成时间：" + (meta["生成时间"] || "--");
+      document.getElementById("range").textContent = "统计区间：" + (meta["统计区间"] || "--");
+      document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
+      document.getElementById("latest").textContent = "最新统计日期：" + (meta["最新统计日期"] || "--");
+      document.getElementById("sub_trend").textContent = `总订单 ${Number(cards["统计区间3D订单总量"] || 0).toLocaleString("zh-CN")}`;
+      document.getElementById("sub_status").textContent = `待取件 ${Number(cards["待取件"] || 0).toLocaleString("zh-CN")}`;
+      document.getElementById("total_orders").textContent = `统计区间3D订单总量：${Number(cards["统计区间3D订单总量"] || 0).toLocaleString("zh-CN")}`;
+      document.getElementById("sub_table").textContent = `${(tables["最近3D订单"] || []).length} 条`;
+
+      lineChart("c_order_trend", trends["3D订单日趋势"] || []);
+      pieChart("c_status", dist["订单状态"] || []);
+      barChart("c_department", summarizeDepartments(dist["学院分布"] || [], 5));
+      drawRecentOrders("t_orders", tables["最近3D订单"] || [], 9);
+
+      applyViewportMode();
+      Object.values(chartMap).forEach((chart) => chart && chart.resize());
+    }
+
+    async function loadAndRender() {
+      try {
+        const resp = await fetch(`./data.json?_=${Date.now()}`, {cache: "no-store"});
+        if (!resp.ok) {
+          throw new Error(`HTTP ${resp.status}`);
+        }
+        const data = await resp.json();
+        const version = calcVersion(data);
+        if (version === lastVersion) {
+          return;
+        }
+        lastVersion = version;
+        renderDashboard(data);
+      } catch (err) {
+        console.error("load simple dashboard failed", err);
+      }
+    }
+
+    if (EMBEDDED_DATA && typeof EMBEDDED_DATA === "object") {
+      lastVersion = calcVersion(EMBEDDED_DATA);
+      renderDashboard(EMBEDDED_DATA);
+    }
+
+    setTimeout(() => {
+      applyViewportMode();
+      Object.values(chartMap).forEach((chart) => chart && chart.resize());
+    }, 120);
+
+    if (!IS_FILE_PROTOCOL) {
+      loadAndRender();
+      setInterval(loadAndRender, REFRESH_MS);
+    }
+
+    window.addEventListener("resize", () => {
+      applyViewportMode();
+      Object.values(chartMap).forEach((chart) => chart && chart.resize());
+    });
+    document.addEventListener("fullscreenchange", () => {
+      applyViewportMode();
+      Object.values(chartMap).forEach((chart) => chart && chart.resize());
+    });
+  </script>
+</body>
+</html>

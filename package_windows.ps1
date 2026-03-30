@@ -35,6 +35,7 @@ $specArgs = @(
     '--name', 'dashboard_runner',
     '--distpath', $OutputDir,
     '--add-data', 'index_example.html;.',
+    '--add-data', 'simple_example.html;.',
     'run_universal.py'
 )
 
