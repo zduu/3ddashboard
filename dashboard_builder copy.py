@@ -1,7 +1,6 @@
 import argparse
 import json
 import re
-import sys
 from collections import Counter
 from datetime import datetime
 from pathlib import Path
@@ -9,626 +8,6 @@ from typing import Any
 
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_DASHBOARD_DIR = Path("dashboard")
-
-RESOLUTION_ADAPTIVE_CSS = """
-    /* dashboard-builder resolution adaptation */
-    :root {
-      --display-title-min: 26px;
-      --display-title-fluid: 2.45vw;
-      --display-title-max: 38px;
-      --display-meta-size: 13px;
-      --display-meta-gap: 6px;
-      --display-pill-pad-y: 2px;
-      --display-pill-pad-x: 9px;
-      --display-card-gap: 12px;
-      --display-card-pad-y: 10px;
-      --display-card-pad-x: 12px;
-      --display-card-key-size: 12px;
-      --display-card-value-min: 22px;
-      --display-card-value-fluid: 2.2vw;
-      --display-card-value-max: 30px;
-      --display-panel-pad-top: 7px;
-      --display-panel-pad-side: 8px;
-      --display-panel-pad-bottom: 8px;
-      --display-panel-title-size: 13px;
-      --display-panel-title-gap: 4px;
-      --display-table-size: 10.5px;
-      --display-cell-pad-y: 4px;
-      --display-cell-pad-x: 4px;
-      --display-empty-size: 11px;
-      --display-chart-min-height: 260px;
-      --display-panel-grid-min-height: 280px;
-      --display-trend-grid-min-height: 320px;
-      --display-table-grid-min-height: 320px;
-    }
-
-    .title {
-      font-size: clamp(var(--display-title-min), var(--display-title-fluid), var(--display-title-max)) !important;
-    }
-    .meta {
-      font-size: var(--display-meta-size) !important;
-      gap: var(--display-meta-gap) !important;
-    }
-    .pill {
-      padding: var(--display-pill-pad-y) var(--display-pill-pad-x) !important;
-    }
-    .cards {
-      gap: var(--display-card-gap) !important;
-    }
-    .card {
-      padding: var(--display-card-pad-y) var(--display-card-pad-x) !important;
-    }
-    .k {
-      font-size: var(--display-card-key-size) !important;
-    }
-    .v {
-      font-size: clamp(var(--display-card-value-min), var(--display-card-value-fluid), var(--display-card-value-max)) !important;
-    }
-    .panel-grid {
-      grid-auto-rows: minmax(var(--display-panel-grid-min-height), auto) !important;
-    }
-    .quad-trend .panel-grid {
-      grid-auto-rows: minmax(var(--display-trend-grid-min-height), auto) !important;
-    }
-    .panel-grid.tables-grid {
-      grid-auto-rows: minmax(var(--display-table-grid-min-height), auto) !important;
-    }
-    .panel {
-      padding: var(--display-panel-pad-top) var(--display-panel-pad-side) var(--display-panel-pad-bottom) !important;
-    }
-    .panel h3 {
-      margin-bottom: var(--display-panel-title-gap) !important;
-      font-size: var(--display-panel-title-size) !important;
-    }
-    .chart {
-      min-height: var(--display-chart-min-height) !important;
-    }
-    table {
-      font-size: var(--display-table-size) !important;
-    }
-    th, td {
-      padding: var(--display-cell-pad-y) var(--display-cell-pad-x) !important;
-    }
-    .empty {
-      font-size: var(--display-empty-size) !important;
-    }
-    .global-echart-tooltip {
-      font-size: calc(13.5px * var(--stage-scale, 1)) !important;
-    }
-    body.fixed-scale-mode {
-      display: flex;
-      justify-content: center;
-      align-items: flex-start;
-      overflow: auto !important;
-    }
-    .dashboard-frame {
-      position: relative;
-      flex: 0 0 auto;
-    }
-    .dashboard-stage {
-      position: absolute;
-      left: 0;
-      top: 0;
-      transform-origin: top left;
-      will-change: transform;
-    }
-    body.fixed-scale-mode .wrap {
-      width: 2048px !important;
-      min-height: 1152px !important;
-      height: 1152px !important;
-      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
-    }
-    body.fixed-scale-mode .quad {
-      overflow: hidden !important;
-    }
-    body.fixed-scale-mode .panel-grid {
-      flex: 1 1 0;
-      height: 100%;
-      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
-      grid-auto-rows: auto !important;
-    }
-    body.fixed-scale-mode .quad-trend .panel-grid {
-      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
-    }
-    body.fixed-scale-mode .panel-grid.tables-grid {
-      grid-template-rows: repeat(2, minmax(0, 1fr)) !important;
-    }
-    body.fixed-scale-mode .chart {
-      min-height: 0 !important;
-      height: 100% !important;
-    }
-    body.fixed-scale-mode .table-wrap {
-      height: 100% !important;
-      overflow: hidden !important;
-    }
-    @media (max-width: 900px) {
-      .panel-grid,
-      .quad-trend .panel-grid,
-      .panel-grid.tables-grid {
-        grid-auto-rows: minmax(220px, auto) !important;
-      }
-      .chart {
-        min-height: 240px !important;
-      }
-    }
-    @media (max-height: 920px) {
-      body[data-display-profile="base"] {
-        --outer-pad: 12px;
-        --seam-pad: 20px;
-        --panel-gap: 10px;
-        --display-title-min: 22px;
-        --display-title-fluid: 2.05vw;
-        --display-title-max: 32px;
-        --display-meta-size: 12px;
-        --display-meta-gap: 4px;
-        --display-pill-pad-y: 2px;
-        --display-pill-pad-x: 7px;
-        --display-card-gap: 10px;
-        --display-card-pad-y: 8px;
-        --display-card-pad-x: 10px;
-        --display-card-key-size: 11px;
-        --display-card-value-min: 18px;
-        --display-card-value-fluid: 1.8vw;
-        --display-card-value-max: 24px;
-        --display-panel-pad-top: 6px;
-        --display-panel-pad-side: 7px;
-        --display-panel-pad-bottom: 7px;
-        --display-panel-title-size: 12px;
-        --display-panel-title-gap: 3px;
-        --display-table-size: 10px;
-        --display-cell-pad-y: 3px;
-        --display-cell-pad-x: 4px;
-        --display-empty-size: 11px;
-        --display-chart-min-height: 120px;
-        --display-panel-grid-min-height: 180px;
-        --display-trend-grid-min-height: 220px;
-        --display-table-grid-min-height: 220px;
-      }
-    }
-    @media (max-height: 820px) {
-      body[data-display-profile="base"] {
-        --display-card-gap: 8px;
-        --display-title-min: 20px;
-        --display-title-fluid: 1.8vw;
-        --display-title-max: 28px;
-        --display-chart-min-height: 96px;
-        --display-panel-grid-min-height: 160px;
-        --display-trend-grid-min-height: 190px;
-        --display-table-grid-min-height: 190px;
-      }
-    }
-"""
-
-RESOLUTION_ADAPTIVE_SCRIPT = """
-    const FIXED_STAGE_WIDTH = 2048;
-    const FIXED_STAGE_HEIGHT = 1152;
-    const FIXED_REFERENCE_PROFILE = "qhd";
-    const DISPLAY_PROFILES = [
-      {
-        name: "base",
-        minWidth: 0,
-        minHeight: 0,
-        cssVars: {
-          "--outer-pad": "18px",
-          "--seam-pad": "30px",
-          "--panel-gap": "14px",
-          "--display-title-min": "26px",
-          "--display-title-fluid": "2.45vw",
-          "--display-title-max": "38px",
-          "--display-meta-size": "13px",
-          "--display-meta-gap": "6px",
-          "--display-pill-pad-y": "2px",
-          "--display-pill-pad-x": "9px",
-          "--display-card-gap": "12px",
-          "--display-card-pad-y": "10px",
-          "--display-card-pad-x": "12px",
-          "--display-card-key-size": "12px",
-          "--display-card-value-min": "22px",
-          "--display-card-value-fluid": "2.2vw",
-          "--display-card-value-max": "30px",
-          "--display-panel-pad-top": "7px",
-          "--display-panel-pad-side": "8px",
-          "--display-panel-pad-bottom": "8px",
-          "--display-panel-title-size": "13px",
-          "--display-panel-title-gap": "4px",
-          "--display-table-size": "10.5px",
-          "--display-cell-pad-y": "4px",
-          "--display-cell-pad-x": "4px",
-          "--display-empty-size": "11px",
-          "--display-chart-min-height": "260px",
-          "--display-panel-grid-min-height": "280px",
-          "--display-trend-grid-min-height": "320px",
-          "--display-table-grid-min-height": "320px"
-        },
-        chart: {
-          tooltipFontSize: 12,
-          lineGridLeft: 38,
-          lineGridRight: 8,
-          lineGridTop: 22,
-          lineGridBottom: 26,
-          axisFontSize: 10,
-          axisMargin: 10,
-          seriesLabelFontSize: 10,
-          lineSymbolSize: 6,
-          lineWidth: 2.5,
-          barGridLeft: 86,
-          barGridRight: 18,
-          barGridTop: 22,
-          barGridBottom: 24,
-          barCategoryFontSize: 9,
-          barLabelWidth: 82,
-          barLabelLineHeight: 11,
-          pieLegendFontSize: 10,
-          pieLegendItemWidth: 10,
-          pieLegendItemHeight: 10,
-          pieLabelFontSize: 9,
-          pieLabelWidth: 112,
-          pieLabelLineHeight: 12,
-          pieRadius: ["28%", "58%"],
-          pieCenter: ["46%", "40%"],
-          pieLabelLineLength: 8,
-          pieLabelLineLength2: 6
-        }
-      },
-      {
-        name: "qhd",
-        minWidth: 2048,
-        minHeight: 1280,
-        cssVars: {
-          "--outer-pad": "16px",
-          "--seam-pad": "18px",
-          "--panel-gap": "10px",
-          "--display-title-min": "30px",
-          "--display-title-fluid": "2.15vw",
-          "--display-title-max": "46px",
-          "--display-meta-size": "15px",
-          "--display-meta-gap": "8px",
-          "--display-pill-pad-y": "3px",
-          "--display-pill-pad-x": "11px",
-          "--display-card-gap": "14px",
-          "--display-card-pad-y": "12px",
-          "--display-card-pad-x": "14px",
-          "--display-card-key-size": "13.5px",
-          "--display-card-value-min": "26px",
-          "--display-card-value-fluid": "2.05vw",
-          "--display-card-value-max": "36px",
-          "--display-panel-pad-top": "8px",
-          "--display-panel-pad-side": "9px",
-          "--display-panel-pad-bottom": "9px",
-          "--display-panel-title-size": "14.5px",
-          "--display-panel-title-gap": "4px",
-          "--display-table-size": "11.5px",
-          "--display-cell-pad-y": "5px",
-          "--display-cell-pad-x": "5px",
-          "--display-empty-size": "12px",
-          "--display-chart-min-height": "280px",
-          "--display-panel-grid-min-height": "300px",
-          "--display-trend-grid-min-height": "320px",
-          "--display-table-grid-min-height": "320px"
-        },
-        chart: {
-          tooltipFontSize: 13.5,
-          lineGridLeft: 46,
-          lineGridRight: 12,
-          lineGridTop: 26,
-          lineGridBottom: 32,
-          axisFontSize: 11.5,
-          axisMargin: 12,
-          seriesLabelFontSize: 12,
-          lineSymbolSize: 7,
-          lineWidth: 3,
-          barGridLeft: 102,
-          barGridRight: 24,
-          barGridTop: 26,
-          barGridBottom: 32,
-          barCategoryFontSize: 10.5,
-          barLabelWidth: 96,
-          barLabelLineHeight: 13,
-          pieLegendFontSize: 12,
-          pieLegendItemWidth: 12,
-          pieLegendItemHeight: 12,
-          pieLabelFontSize: 11,
-          pieLabelWidth: 140,
-          pieLabelLineHeight: 14,
-          pieRadius: ["28%", "60%"],
-          pieCenter: ["44%", "40%"],
-          pieLabelLineLength: 10,
-          pieLabelLineLength2: 8
-        }
-      },
-      {
-        name: "uhd",
-        minWidth: 3200,
-        minHeight: 1800,
-        cssVars: {
-          "--outer-pad": "32px",
-          "--seam-pad": "48px",
-          "--panel-gap": "22px",
-          "--display-title-min": "42px",
-          "--display-title-fluid": "2.15vw",
-          "--display-title-max": "74px",
-          "--display-meta-size": "20px",
-          "--display-meta-gap": "12px",
-          "--display-pill-pad-y": "5px",
-          "--display-pill-pad-x": "15px",
-          "--display-card-gap": "20px",
-          "--display-card-pad-y": "18px",
-          "--display-card-pad-x": "20px",
-          "--display-card-key-size": "18px",
-          "--display-card-value-min": "38px",
-          "--display-card-value-fluid": "2vw",
-          "--display-card-value-max": "58px",
-          "--display-panel-pad-top": "14px",
-          "--display-panel-pad-side": "16px",
-          "--display-panel-pad-bottom": "16px",
-          "--display-panel-title-size": "20px",
-          "--display-panel-title-gap": "8px",
-          "--display-table-size": "15.5px",
-          "--display-cell-pad-y": "7px",
-          "--display-cell-pad-x": "8px",
-          "--display-empty-size": "15px",
-          "--display-chart-min-height": "420px",
-          "--display-panel-grid-min-height": "430px",
-          "--display-trend-grid-min-height": "500px",
-          "--display-table-grid-min-height": "500px"
-        },
-        chart: {
-          tooltipFontSize: 18,
-          lineGridLeft: 68,
-          lineGridRight: 18,
-          lineGridTop: 36,
-          lineGridBottom: 46,
-          axisFontSize: 16,
-          axisMargin: 16,
-          seriesLabelFontSize: 16,
-          lineSymbolSize: 9,
-          lineWidth: 4,
-          barGridLeft: 146,
-          barGridRight: 34,
-          barGridTop: 36,
-          barGridBottom: 44,
-          barCategoryFontSize: 14.5,
-          barLabelWidth: 150,
-          barLabelLineHeight: 18,
-          pieLegendFontSize: 16,
-          pieLegendItemWidth: 16,
-          pieLegendItemHeight: 16,
-          pieLabelFontSize: 14.5,
-          pieLabelWidth: 196,
-          pieLabelLineHeight: 19,
-          pieRadius: ["31%", "63%"],
-          pieCenter: ["42%", "39%"],
-          pieLabelLineLength: 14,
-          pieLabelLineLength2: 12
-        }
-      },
-      {
-        name: "ultra",
-        minWidth: 4480,
-        minHeight: 2520,
-        cssVars: {
-          "--outer-pad": "34px",
-          "--seam-pad": "52px",
-          "--panel-gap": "24px",
-          "--display-title-min": "42px",
-          "--display-title-fluid": "1.75vw",
-          "--display-title-max": "70px",
-          "--display-meta-size": "19px",
-          "--display-meta-gap": "12px",
-          "--display-pill-pad-y": "5px",
-          "--display-pill-pad-x": "15px",
-          "--display-card-gap": "22px",
-          "--display-card-pad-y": "18px",
-          "--display-card-pad-x": "20px",
-          "--display-card-key-size": "17px",
-          "--display-card-value-min": "38px",
-          "--display-card-value-fluid": "1.65vw",
-          "--display-card-value-max": "56px",
-          "--display-panel-pad-top": "14px",
-          "--display-panel-pad-side": "17px",
-          "--display-panel-pad-bottom": "17px",
-          "--display-panel-title-size": "19px",
-          "--display-panel-title-gap": "8px",
-          "--display-table-size": "15px",
-          "--display-cell-pad-y": "7px",
-          "--display-cell-pad-x": "8px",
-          "--display-empty-size": "15px",
-          "--display-chart-min-height": "420px",
-          "--display-panel-grid-min-height": "440px",
-          "--display-trend-grid-min-height": "500px",
-          "--display-table-grid-min-height": "500px"
-        },
-        chart: {
-          tooltipFontSize: 18,
-          lineGridLeft: 68,
-          lineGridRight: 18,
-          lineGridTop: 36,
-          lineGridBottom: 46,
-          axisFontSize: 16,
-          axisMargin: 16,
-          seriesLabelFontSize: 16,
-          lineSymbolSize: 9,
-          lineWidth: 4,
-          barGridLeft: 142,
-          barGridRight: 34,
-          barGridTop: 36,
-          barGridBottom: 44,
-          barCategoryFontSize: 14,
-          barLabelWidth: 146,
-          barLabelLineHeight: 18,
-          pieLegendFontSize: 16,
-          pieLegendItemWidth: 16,
-          pieLegendItemHeight: 16,
-          pieLabelFontSize: 14.5,
-          pieLabelWidth: 196,
-          pieLabelLineHeight: 19,
-          pieRadius: ["31%", "63%"],
-          pieCenter: ["42%", "40%"],
-          pieLabelLineLength: 14,
-          pieLabelLineLength2: 12
-        }
-      }
-    ];
-
-    let currentDisplayProfile = DISPLAY_PROFILES[0];
-    let displaySyncTimer = 0;
-
-    function selectDisplayProfile() {
-      return DISPLAY_PROFILES.find((profile) => profile.name === FIXED_REFERENCE_PROFILE) || DISPLAY_PROFILES[0];
-    }
-
-    function applyDisplayProfile(force = false) {
-      const selected = selectDisplayProfile();
-      if (!force && currentDisplayProfile.name === selected.name) {
-        return false;
-      }
-      currentDisplayProfile = selected;
-      document.body.setAttribute("data-display-profile", selected.name);
-      Object.entries(selected.cssVars).forEach(([key, value]) => {
-        document.documentElement.style.setProperty(key, value);
-      });
-      return true;
-    }
-
-    function ensureFixedScaleStage() {
-      const wrap = document.querySelector(".wrap");
-      if (!wrap) {
-        return null;
-      }
-      let frame = document.querySelector(".dashboard-frame");
-      let stage = document.querySelector(".dashboard-stage");
-      if (frame && stage) {
-        return {frame, stage, wrap};
-      }
-      frame = document.createElement("div");
-      frame.className = "dashboard-frame";
-      stage = document.createElement("div");
-      stage.className = "dashboard-stage";
-      const parent = wrap.parentNode;
-      parent.insertBefore(frame, wrap);
-      frame.appendChild(stage);
-      stage.appendChild(wrap);
-      return {frame, stage, wrap};
-    }
-
-    function syncFixedScaleStage() {
-      const refs = ensureFixedScaleStage();
-      if (!refs) {
-        return;
-      }
-      const {frame, stage} = refs;
-      const viewportWidth = Math.max(window.innerWidth || 0, 320);
-      const viewportHeight = Math.max(window.innerHeight || 0, 320);
-      const scale = Math.max(Math.min(viewportWidth / FIXED_STAGE_WIDTH, viewportHeight / FIXED_STAGE_HEIGHT), 0.1);
-      document.body.classList.add("fixed-scale-mode");
-      document.documentElement.style.setProperty("--stage-scale", String(scale));
-      frame.style.width = `${Math.round(FIXED_STAGE_WIDTH * scale)}px`;
-      frame.style.height = `${Math.round(FIXED_STAGE_HEIGHT * scale)}px`;
-      stage.style.width = `${FIXED_STAGE_WIDTH}px`;
-      stage.style.height = `${FIXED_STAGE_HEIGHT}px`;
-      stage.style.transform = `scale(${scale})`;
-    }
-
-    function updateLineChartDisplay(chart) {
-      const m = currentDisplayProfile.chart;
-      chart.setOption({
-        grid: {left: m.lineGridLeft, right: m.lineGridRight, top: m.lineGridTop, bottom: m.lineGridBottom, containLabel: true},
-        tooltip: {textStyle: {fontSize: m.tooltipFontSize}},
-        xAxis: {axisLabel: {fontSize: m.axisFontSize, margin: m.axisMargin}},
-        yAxis: {axisLabel: {fontSize: m.axisFontSize, margin: m.axisMargin}},
-        series: [{
-          symbolSize: m.lineSymbolSize,
-          lineStyle: {width: m.lineWidth},
-          label: {fontSize: m.seriesLabelFontSize}
-        }]
-      });
-    }
-
-    function updateBarChartDisplay(chart) {
-      const m = currentDisplayProfile.chart;
-      chart.setOption({
-        grid: {left: m.barGridLeft, right: m.barGridRight, top: m.barGridTop, bottom: m.barGridBottom, containLabel: false},
-        tooltip: {textStyle: {fontSize: m.tooltipFontSize}},
-        xAxis: {axisLabel: {fontSize: m.axisFontSize, margin: m.axisMargin}},
-        yAxis: {
-          axisLabel: {
-            fontSize: m.barCategoryFontSize,
-            width: m.barLabelWidth,
-            lineHeight: m.barLabelLineHeight
-          }
-        },
-        series: [{
-          label: {fontSize: m.seriesLabelFontSize}
-        }]
-      });
-    }
-
-    function updatePieChartDisplay(chart) {
-      const m = currentDisplayProfile.chart;
-      chart.setOption({
-        tooltip: {textStyle: {fontSize: m.tooltipFontSize}},
-        legend: {
-          textStyle: {fontSize: m.pieLegendFontSize},
-          itemWidth: m.pieLegendItemWidth,
-          itemHeight: m.pieLegendItemHeight
-        },
-        series: [{
-          radius: m.pieRadius,
-          center: m.pieCenter,
-          label: {
-            fontSize: m.pieLabelFontSize,
-            width: m.pieLabelWidth,
-            lineHeight: m.pieLabelLineHeight
-          },
-          labelLine: {
-            length: m.pieLabelLineLength,
-            length2: m.pieLabelLineLength2
-          }
-        }]
-      });
-    }
-
-    function updateChartsForDisplayProfile() {
-      Object.entries(chartMap).forEach(([id, chart]) => {
-        if (!chart) {
-          return;
-        }
-        if (id === "c_order_trend" || id === "c_action_trend") {
-          updateLineChartDisplay(chart);
-          return;
-        }
-        if (id === "c_purpose" || id === "c_department") {
-          updateBarChartDisplay(chart);
-          return;
-        }
-        if (id === "c_status" || id === "c_print") {
-          updatePieChartDisplay(chart);
-        }
-      });
-    }
-
-    function syncDisplayProfile() {
-      applyDisplayProfile(true);
-      applyViewportMode();
-      Object.values(chartMap).forEach((chart) => {
-        if (chart) {
-          chart.resize();
-        }
-      });
-      updateChartsForDisplayProfile();
-    }
-
-    function scheduleDisplaySync(delay = 60) {
-      if (displaySyncTimer) {
-        window.clearTimeout(displaySyncTimer);
-      }
-      displaySyncTimer = window.setTimeout(() => {
-        syncDisplayProfile();
-      }, delay);
-    }
-
-    applyDisplayProfile(true);
-"""
 
 STATUS_MAP = {
     "wait-for-approval": "待审核",
@@ -1253,122 +632,433 @@ def build_3d_dataset(
     }
 
 
-def html_template(payload_json: str, template_path: Path | None = None) -> str:
-    candidates: list[Path] = []
+def html_template(payload_json: str) -> str:
+    return f'''<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>3D打印数据看板</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Noto+Sans+SC:wght@400;500;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <style>
+    :root {{
+      --bg-a: #f2f9ff;
+      --bg-b: #ffe5c8;
+      --ink: #0f2238;
+      --muted: #5f7084;
+      --card: rgba(255,255,255,.80);
+      --line: rgba(15,34,56,.12);
+      --accent-1: #ff5a36;
+      --accent-2: #1f8ed8;
+      --accent-3: #3f9142;
+      --shadow: 0 10px 26px rgba(7,35,66,.12);
+    }}
+    * {{ box-sizing: border-box; }}
+    html, body {{ width: 100%; height: 100%; }}
+    body {{
+      margin: 0;
+      overflow: hidden;
+      color: var(--ink);
+      font-family: "Noto Sans SC", "Space Grotesk", sans-serif;
+      background:
+        radial-gradient(1100px 500px at 5% -15%, #a7ddff 0%, transparent 62%),
+        radial-gradient(800px 450px at 98% 0%, #ffd5a7 0%, transparent 64%),
+        linear-gradient(130deg, var(--bg-a), var(--bg-b));
+    }}
 
-    def append_candidate(path: Path | None) -> None:
-        if path is None:
-            return
-        if any(existing.resolve() == path.resolve() for existing in candidates):
-            return
-        candidates.append(path)
+    .wrap {{
+      width: 100vw;
+      height: 100vh;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-template-rows: repeat(2, minmax(0, 1fr));
+      gap: 0;
+    }}
 
-    bundled_root = getattr(sys, "_MEIPASS", "")
-    if bundled_root:
-        append_candidate(Path(bundled_root) / "index_example.html")
+    .quad {{
+      min-width: 0;
+      min-height: 0;
+      padding: 16px 18px;
+      display: flex;
+      flex-direction: column;
+      gap: 12px;
+      overflow: hidden;
+    }}
+    .title {{
+      margin: 0;
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      font-size: clamp(24px, 2.4vw, 36px);
+      line-height: 1.05;
+      letter-spacing: -0.02em;
+    }}
+    .meta {{
+      margin-top: 4px;
+      color: var(--muted);
+      font-size: 13px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+    }}
+    .pill {{
+      border:1px solid var(--line);
+      border-radius:999px;
+      padding:2px 9px;
+      background:rgba(255,255,255,.65);
+      white-space: nowrap;
+    }}
 
-    append_candidate(template_path)
-    append_candidate(Path("index_example.html"))
-    append_candidate(DEFAULT_DASHBOARD_DIR / "index.html")
+    .cards {{
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+      gap: 10px;
+      padding-right: 2px;
+      overflow-y: auto;
+      align-content: start;
+    }}
+    .card {{
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 8px 10px;
+      backdrop-filter: blur(8px);
+    }}
+    .k {{ font-size: 12px; color: var(--muted); }}
+    .v {{
+      margin-top: 2px;
+      font-family: "Space Grotesk", sans-serif;
+      font-size: clamp(22px, 2.2vw, 30px);
+      font-weight: 700;
+      line-height: 1.05;
+    }}
 
-    template_text: str | None = None
-    for path in candidates:
-        if path.exists() and path.is_file():
-            template_text = path.read_text(encoding="utf-8")
-            break
+    .panel-grid {{
+      flex: 1;
+      min-height: 0;
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      grid-auto-rows: minmax(0, 1fr);
+      gap: 12px;
+    }}
 
-    if template_text is None:
-        raise FileNotFoundError(
-            "未找到 HTML 模板文件，请先准备 index_example.html 或 dashboard/index.html 后再生成看板。"
-        )
+    .quad-trend .panel-grid {{
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(0, 1fr);
+    }}
 
-    template_text = inject_resolution_adaptation(template_text)
+    .panel-grid.tables-grid {{
+      grid-template-columns: 1fr;
+      grid-auto-rows: minmax(0, 1fr);
+    }}
 
-    pattern = re.compile(
-        r"const EMBEDDED_DATA = .*?;\n(\s*const IS_FILE_PROTOCOL = )",
-        re.DOTALL,
-    )
-    rendered, count = pattern.subn(
-        f"const EMBEDDED_DATA = {payload_json};\n\\1",
-        template_text,
-        count=1,
-    )
-    if count != 1:
-        raise RuntimeError("HTML 模板中未找到 EMBEDDED_DATA 注入点。")
-    return rendered
+    .panel {{
+      min-height: 0;
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 7px 8px 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+    }}
+    .panel h3 {{
+      margin: 0 2px 4px;
+      font-size: 13px;
+      line-height: 1.2;
+    }}
+    .chart {{ width: 100%; flex: 1; min-height: 0; }}
+    .table-wrap {{ flex: 1; min-height: 0; overflow: auto; }}
 
+    table {{ width: 100%; border-collapse: collapse; font-size: 11px; }}
+    th, td {{
+      text-align: left;
+      padding: 4px 4px;
+      border-bottom: 1px dashed var(--line);
+      word-break: break-all;
+      vertical-align: top;
+    }}
+    th {{ color: var(--muted); font-weight: 500; }}
+    .empty {{ color:#8190a0; padding:8px 4px; font-size:11px; }}
 
-def replace_once(text: str, old: str, new: str, error_message: str) -> str:
-    if old not in text:
-        raise RuntimeError(error_message)
-    return text.replace(old, new, 1)
+    @media (max-width: 1280px), (max-height: 740px) {{
+      body {{ overflow: auto; }}
+      .wrap {{
+        height: auto;
+        min-height: 100vh;
+        grid-template-columns: 1fr;
+        grid-template-rows: repeat(4, minmax(0, auto));
+      }}
+      .quad {{
+        padding: 14px 16px;
+      }}
+    }}
 
+    @media (max-width: 900px) {{
+      html, body {{ height: auto; min-height: 100%; }}
+      body {{ overflow: auto; }}
+      .wrap {{
+        padding: 10px 10px 16px;
+        gap: 10px;
+        grid-template-columns: 1fr;
+        grid-template-rows: none;
+      }}
+      .quad {{ padding: 12px 14px; }}
+      .meta {{ font-size: 12px; gap: 4px; }}
+      .pill {{ padding: 2px 8px; }}
+      .cards {{ grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }}
+      .card {{ padding: 8px 8px; }}
+      .k {{ font-size: 11px; }}
+      .v {{ font-size: clamp(18px, 5.4vw, 24px); }}
+      .panel-grid {{
+        grid-template-columns: 1fr;
+        grid-auto-rows: minmax(220px, auto);
+      }}
+      .panel-grid.tables-grid {{
+        grid-auto-rows: minmax(240px, auto);
+      }}
+      .panel {{ overflow: auto; }}
+      .chart {{ min-height: 240px; }}
+      .table-wrap {{ height: auto; overflow: auto; }}
+      table {{ min-width: 520px; font-size: 12px; }}
+      th, td {{ padding: 5px 6px; }}
+    }}
 
-def inject_resolution_adaptation(template_text: str) -> str:
-    if "dashboard-builder resolution adaptation" in template_text:
-        return template_text
+    @media (max-width: 480px) {{
+      .title {{ font-size: clamp(20px, 6.2vw, 28px); }}
+      .cards {{ grid-template-columns: 1fr 1fr; }}
+      .meta {{ display: grid; grid-template-columns: 1fr; }}
+      table {{ min-width: 460px; font-size: 11px; }}
+    }}
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="quad quad-hero">
+      <div>
+        <h1 class="title">3D打印运营展示板</h1>
+        <div class="meta">
+          <span class="pill" id="gen"></span>
+          <span class="pill" id="src"></span>
+          <span class="pill" id="range"></span>
+          <span class="pill" id="latest"></span>
+        </div>
+      </div>
+      <section class="cards" id="cards"></section>
+    </section>
 
-    template_text = replace_once(
-        template_text,
-        "\n  </style>",
-        f"{RESOLUTION_ADAPTIVE_CSS}\n  </style>",
-        "HTML 模板中未找到样式结束标记，无法注入分辨率适配样式。",
-    )
+    <section class="quad quad-trend">
+      <div class="panel-grid">
+        <div class="panel"><h3>3D订单日趋势</h3><div class="chart" id="c_order_trend"></div></div>
+        <div class="panel"><h3>3D订单操作日趋势</h3><div class="chart" id="c_action_trend"></div></div>
+      </div>
+    </section>
 
-    template_text = replace_once(
-        template_text,
-        '    let lastVersion = "";\n',
-        f'    let lastVersion = "";\n{RESOLUTION_ADAPTIVE_SCRIPT}\n',
-        "HTML 模板中未找到脚本注入点，无法注入分辨率适配逻辑。",
-    )
+    <section class="quad quad-dist">
+      <div class="panel-grid">
+        <div class="panel"><h3>订单状态分布</h3><div class="chart" id="c_status"></div></div>
+        <div class="panel"><h3>打印工艺分布</h3><div class="chart" id="c_print"></div></div>
+        <div class="panel"><h3>订单用途分布</h3><div class="chart" id="c_purpose"></div></div>
+        <div class="panel"><h3>学院分布</h3><div class="chart" id="c_department"></div></div>
+      </div>
+    </section>
 
-    template_text = replace_once(
-        template_text,
-        "    function applyViewportMode() {\n"
-        "      if (isFullscreenLike()) {\n"
-        "        syncDashboardLayout();\n"
-        "      } else {\n"
-        "        clearDashboardLayout();\n"
-        "      }\n"
-        "    }\n",
-        "    function applyViewportMode() {\n"
-        "      syncFixedScaleStage();\n"
-        "      syncDashboardLayout();\n"
-        "    }\n",
-        "HTML 模板中未找到视口模式函数，无法切换到固定比例缩放模式。",
-    )
+    <section class="quad quad-tables">
+      <div class="panel-grid tables-grid">
+        <div class="panel"><h3>最近3D订单</h3><div class="table-wrap" id="t_orders"></div></div>
+        <div class="panel"><h3>最近3D助管操作</h3><div class="table-wrap" id="t_actions"></div></div>
+      </div>
+    </section>
+  </div>
 
-    template_text = replace_once(
-        template_text,
-        '      drawTable("t_orders", tables["最近3D订单"] || [], 7);\n'
-        '      drawTable("t_actions", tables["最近3D助管操作"] || [], 8);\n',
-        '      drawTable("t_orders", tables["最近3D订单"] || [], 7);\n'
-        '      drawTable("t_actions", tables["最近3D助管操作"] || [], 8);\n'
-        '      scheduleDisplaySync(0);\n',
-        "HTML 模板中未找到渲染结束片段，无法接入分辨率适配刷新。",
-    )
+  <script>
+    const EMBEDDED_DATA = {payload_json};
+    const IS_FILE_PROTOCOL = window.location.protocol === "file:";
+    const REFRESH_MS = 5 * 60 * 1000; // Change here if you want a longer polling interval.
+    const chartMap = {{}};
+    let lastVersion = "";
 
-    template_text = replace_once(
-        template_text,
-        '    document.addEventListener("fullscreenchange", () => {\n'
-        "      applyViewportMode();\n"
-        "      Object.values(chartMap).forEach(c => c && c.resize());\n"
-        "    });\n",
-        '    document.addEventListener("fullscreenchange", () => {\n'
-        "      applyViewportMode();\n"
-        "      Object.values(chartMap).forEach(c => c && c.resize());\n"
-        "      scheduleDisplaySync(120);\n"
-        "    });\n"
-        '    window.addEventListener("resize", () => {\n'
-        "      scheduleDisplaySync(80);\n"
-        "    });\n"
-        '    window.addEventListener("load", () => {\n'
-        "      scheduleDisplaySync(120);\n"
-        "    });\n",
-        "HTML 模板中未找到全屏事件片段，无法补充分辨率适配监听。",
-    )
+    function getChart(id) {{
+      if (!chartMap[id]) {{
+        chartMap[id] = echarts.init(document.getElementById(id));
+      }}
+      return chartMap[id];
+    }}
 
-    return template_text
+    function lineChart(id, list, color) {{
+      const chart = getChart(id);
+      const x = (list || []).map(i => (i.date || "").replace(/^\d{{4}}-/, ""));
+      const y = (list || []).map(i => i.count);
+      chart.setOption({{
+        animation: false,
+        grid: {{left: 38, right: 8, top: 22, bottom: 26}},
+        tooltip: {{trigger: "axis"}},
+        xAxis: {{type: "category", data: x, axisLabel: {{color: "#5f7084", fontSize: 10, interval: "auto", rotate: 30}}}},
+        yAxis: {{type: "value", axisLabel: {{color: "#5f7084", fontSize: 10}}, splitLine: {{lineStyle: {{color: "rgba(15,34,56,.08)"}}}}}},
+        series: [{{
+          type: "line",
+          data: y,
+          smooth: true,
+          symbolSize: 6,
+          areaStyle: {{opacity: .10}},
+          lineStyle: {{width: 2.5, color}},
+          itemStyle: {{color}},
+          label: {{show: true, position: "top", color: "#3b4e61", fontSize: 10}}
+        }}]
+      }});
+      return chart;
+    }}
+
+    function barChart(id, items, color) {{
+      const chart = getChart(id);
+      const names = (items || []).map(i => i.name);
+      const values = (items || []).map(i => i.count);
+      chart.setOption({{
+        animation: false,
+        grid: {{left: 88, right: 28, top: 22, bottom: 14}},
+        tooltip: {{trigger: "axis", axisPointer: {{type: "shadow"}}}},
+        xAxis: {{type: "value", axisLabel: {{color: "#5f7084", fontSize: 10}}, splitLine: {{lineStyle: {{color: "rgba(15,34,56,.08)"}}}}}},
+        yAxis: {{type: "category", data: names, axisLabel: {{color: "#5f7084", fontSize: 10, width: 86, overflow: "truncate"}}}},
+        series: [{{
+          type: "bar",
+          data: values,
+          itemStyle: {{color, borderRadius: [0, 7, 7, 0]}},
+          label: {{show: true, position: "right", color: "#32475a", fontSize: 10}}
+        }}]
+      }});
+      return chart;
+    }}
+
+    function pieChart(id, items) {{
+      const chart = getChart(id);
+      chart.setOption({{
+        animation: false,
+        tooltip: {{trigger: "item"}},
+        legend: {{bottom: 0, textStyle: {{color: "#5f7084", fontSize: 10}}}},
+        series: [{{
+          type: "pie",
+          radius: ["32%", "66%"],
+          center: ["50%", "40%"],
+          data: (items || []).map(i => ({{name: i.name, value: i.count}})),
+          label: {{show: true, formatter: "{{b}}: {{c}}", color: "#3a4d60", fontSize: 10}},
+          labelLine: {{length: 9, length2: 7}}
+        }}]
+      }});
+      return chart;
+    }}
+
+    function formatTimestampText(value) {{
+      if (value === undefined || value === null) {{
+        return "";
+      }}
+      const raw = String(value).trim();
+      if (!raw) {{
+        return "";
+      }}
+      const match = raw.match(/^(\d{{4}}-\d{{2}}-\d{{2}})[ T](\d{{2}}:\d{{2}})/);
+      if (match) {{
+        return `${{match[1]}}T${{match[2]}}`;
+      }}
+      if (raw.length >= 16 && (raw[10] === "T" || raw[10] === " ") && raw[13] === ":") {{
+        return raw[10] === "T" ? raw.slice(0, 16) : `${{raw.slice(0, 10)}}T${{raw.slice(11, 16)}}`;
+      }}
+      return raw;
+    }}
+
+    function drawTable(id, rows, maxRows = 8) {{
+      const root = document.getElementById(id);
+      if (!rows || !rows.length) {{
+        root.innerHTML = '<div class="empty">暂无数据</div>';
+        return;
+      }}
+      const data = rows.slice(0, maxRows);
+      const cols = Object.keys(data[0]);
+      const thead = '<thead><tr>' + cols.map(c => `<th>${{c}}</th>`).join('') + '</tr></thead>';
+      const tbody = '<tbody>' + data.map(r => '<tr>' + cols.map(c => {{
+        const raw = r[c];
+        const text = /时间|日期/.test(c) ? formatTimestampText(raw) : (raw ?? "");
+        return `<td>${{text}}</td>`;
+      }}).join('') + '</tr>').join('') + '</tbody>';
+      root.innerHTML = `<table>${{thead}}${{tbody}}</table>`;
+    }}
+
+    function renderDashboard(data) {{
+      const meta = data["元信息"] || {{}};
+      document.getElementById("gen").textContent = "生成时间：" + (meta["生成时间"] || "--");
+      document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
+      document.getElementById("range").textContent = "统计区间：" + (meta["统计区间"] || "--");
+      document.getElementById("latest").textContent = "最新统计日期：" + (meta["最新统计日期"] || "--");
+
+      const cardsRoot = document.getElementById("cards");
+      cardsRoot.innerHTML = "";
+      const cards = data["指标卡"] || {{}};
+      Object.entries(cards).forEach(([k,v]) => {{
+        const div = document.createElement("div");
+        div.className = "card";
+        div.innerHTML = `<div class="k">${{k}}</div><div class="v">${{Number(v || 0).toLocaleString("zh-CN")}}</div>`;
+        cardsRoot.appendChild(div);
+      }});
+
+      const trends = data["趋势"] || {{}};
+      const dist = data["分布"] || {{}};
+      const tables = data["表格"] || {{}};
+
+      lineChart("c_order_trend", trends["3D订单日趋势"] || [], "#ff5a36");
+      lineChart("c_action_trend", trends["3D订单操作日趋势"] || [], "#1f8ed8");
+      pieChart("c_status", dist["订单状态"] || []);
+      pieChart("c_print", dist["打印工艺"] || []);
+      barChart("c_purpose", dist["订单用途"] || [], "#3f9142");
+      barChart("c_department", dist["学院分布"] || [], "#2d80c2");
+
+      drawTable("t_orders", tables["最近3D订单"] || [], 8);
+      drawTable("t_actions", tables["最近3D助管操作"] || [], 10);
+    }}
+
+    function calcVersion(data) {{
+      const meta = data["元信息"] || {{}};
+      const cards = data["指标卡"] || {{}};
+      return `${{meta["生成时间"] || ""}}|${{meta["最新统计日期"] || ""}}|${{JSON.stringify(cards)}}`;
+    }}
+
+    async function loadAndRender() {{
+      try {{
+        const resp = await fetch(`./data.json?_=${{Date.now()}}`, {{ cache: "no-store" }});
+        if (!resp.ok) {{
+          throw new Error(`HTTP ${{resp.status}}`);
+        }}
+        const data = await resp.json();
+        const version = calcVersion(data);
+        if (version === lastVersion) {{
+          return;
+        }}
+        lastVersion = version;
+        renderDashboard(data);
+      }} catch (err) {{
+        console.error("load dashboard failed", err);
+      }}
+    }}
+
+    if (EMBEDDED_DATA && typeof EMBEDDED_DATA === "object") {{
+      lastVersion = calcVersion(EMBEDDED_DATA);
+      renderDashboard(EMBEDDED_DATA);
+    }}
+
+    if (!IS_FILE_PROTOCOL) {{
+      loadAndRender();
+      setInterval(loadAndRender, REFRESH_MS);
+    }}
+
+    window.addEventListener("resize", () => Object.values(chartMap).forEach(c => c && c.resize()));
+  </script>
+</body>
+</html>
+
+'''
 
 
 
@@ -1432,9 +1122,7 @@ def build_dashboard(output_dir: Path = DEFAULT_OUTPUT_DIR, dashboard_dir: Path =
         json.dump(payload, f, ensure_ascii=False, indent=2)
 
     payload_json = json.dumps(payload, ensure_ascii=False).replace("</script>", "<\\/script>")
-    example_template = Path("index_example.html")
-    preferred_template = example_template if example_template.exists() else None
-    html = html_template(payload_json, template_path=preferred_template)
+    html = html_template(payload_json)
     with html_path.open("w", encoding="utf-8") as f:
         f.write(html)
 

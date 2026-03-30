@@ -29,9 +29,12 @@ Write-Step "Installing Playwright (driver only, no bundled browsers)"
 Write-Step "Running PyInstaller"
 $specArgs = @(
     '--noconfirm',
+    '--clean',
     '--onefile',
     '--windowed',
     '--name', 'dashboard_runner',
+    '--distpath', $OutputDir,
+    '--add-data', 'index_example.html;.',
     'run_universal.py'
 )
 

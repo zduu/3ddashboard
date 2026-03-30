@@ -10,3 +10,5 @@ logs/
 dist/
 build/
 PY_PATH.txt
+.DS_Store
+dashboard.pid
