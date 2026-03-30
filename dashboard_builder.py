@@ -23,16 +23,16 @@ RESOLUTION_ADAPTIVE_CSS = """
       --display-card-gap: 12px;
       --display-card-pad-y: 10px;
       --display-card-pad-x: 12px;
-      --display-card-key-size: 12px;
-      --display-card-value-min: 22px;
-      --display-card-value-fluid: 2.2vw;
-      --display-card-value-max: 30px;
+      --display-card-key-size: 24px;
+      --display-card-value-min: 44px;
+      --display-card-value-fluid: 4.4vw;
+      --display-card-value-max: 60px;
       --display-panel-pad-top: 7px;
       --display-panel-pad-side: 8px;
       --display-panel-pad-bottom: 8px;
       --display-panel-title-size: 13px;
       --display-panel-title-gap: 4px;
-      --display-table-size: 10.5px;
+      --display-table-size: 12.6px;
       --display-cell-pad-y: 4px;
       --display-cell-pad-x: 4px;
       --display-empty-size: 11px;
@@ -166,16 +166,16 @@ RESOLUTION_ADAPTIVE_CSS = """
         --display-card-gap: 10px;
         --display-card-pad-y: 8px;
         --display-card-pad-x: 10px;
-        --display-card-key-size: 11px;
-        --display-card-value-min: 18px;
-        --display-card-value-fluid: 1.8vw;
-        --display-card-value-max: 24px;
+        --display-card-key-size: 22px;
+        --display-card-value-min: 36px;
+        --display-card-value-fluid: 3.6vw;
+        --display-card-value-max: 48px;
         --display-panel-pad-top: 6px;
         --display-panel-pad-side: 7px;
         --display-panel-pad-bottom: 7px;
         --display-panel-title-size: 12px;
         --display-panel-title-gap: 3px;
-        --display-table-size: 10px;
+        --display-table-size: 12px;
         --display-cell-pad-y: 3px;
         --display-cell-pad-x: 4px;
         --display-empty-size: 11px;
@@ -222,16 +222,16 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           "--display-card-gap": "12px",
           "--display-card-pad-y": "10px",
           "--display-card-pad-x": "12px",
-          "--display-card-key-size": "12px",
-          "--display-card-value-min": "22px",
-          "--display-card-value-fluid": "2.2vw",
-          "--display-card-value-max": "30px",
+          "--display-card-key-size": "24px",
+          "--display-card-value-min": "44px",
+          "--display-card-value-fluid": "4.4vw",
+          "--display-card-value-max": "60px",
           "--display-panel-pad-top": "7px",
           "--display-panel-pad-side": "8px",
           "--display-panel-pad-bottom": "8px",
           "--display-panel-title-size": "13px",
           "--display-panel-title-gap": "4px",
-          "--display-table-size": "10.5px",
+          "--display-table-size": "12.6px",
           "--display-cell-pad-y": "4px",
           "--display-cell-pad-x": "4px",
           "--display-empty-size": "11px",
@@ -288,16 +288,16 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           "--display-card-gap": "14px",
           "--display-card-pad-y": "12px",
           "--display-card-pad-x": "14px",
-          "--display-card-key-size": "13.5px",
-          "--display-card-value-min": "26px",
-          "--display-card-value-fluid": "2.05vw",
-          "--display-card-value-max": "36px",
+          "--display-card-key-size": "27px",
+          "--display-card-value-min": "52px",
+          "--display-card-value-fluid": "4.1vw",
+          "--display-card-value-max": "72px",
           "--display-panel-pad-top": "8px",
           "--display-panel-pad-side": "9px",
           "--display-panel-pad-bottom": "9px",
           "--display-panel-title-size": "14.5px",
           "--display-panel-title-gap": "4px",
-          "--display-table-size": "11.5px",
+          "--display-table-size": "13.8px",
           "--display-cell-pad-y": "5px",
           "--display-cell-pad-x": "5px",
           "--display-empty-size": "12px",
@@ -354,16 +354,16 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           "--display-card-gap": "20px",
           "--display-card-pad-y": "18px",
           "--display-card-pad-x": "20px",
-          "--display-card-key-size": "18px",
-          "--display-card-value-min": "38px",
-          "--display-card-value-fluid": "2vw",
-          "--display-card-value-max": "58px",
+          "--display-card-key-size": "36px",
+          "--display-card-value-min": "76px",
+          "--display-card-value-fluid": "4vw",
+          "--display-card-value-max": "116px",
           "--display-panel-pad-top": "14px",
           "--display-panel-pad-side": "16px",
           "--display-panel-pad-bottom": "16px",
           "--display-panel-title-size": "20px",
           "--display-panel-title-gap": "8px",
-          "--display-table-size": "15.5px",
+          "--display-table-size": "18.6px",
           "--display-cell-pad-y": "7px",
           "--display-cell-pad-x": "8px",
           "--display-empty-size": "15px",
@@ -420,16 +420,16 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           "--display-card-gap": "22px",
           "--display-card-pad-y": "18px",
           "--display-card-pad-x": "20px",
-          "--display-card-key-size": "17px",
-          "--display-card-value-min": "38px",
-          "--display-card-value-fluid": "1.65vw",
-          "--display-card-value-max": "56px",
+          "--display-card-key-size": "34px",
+          "--display-card-value-min": "76px",
+          "--display-card-value-fluid": "3.3vw",
+          "--display-card-value-max": "112px",
           "--display-panel-pad-top": "14px",
           "--display-panel-pad-side": "17px",
           "--display-panel-pad-bottom": "17px",
           "--display-panel-title-size": "19px",
           "--display-panel-title-gap": "8px",
-          "--display-table-size": "15px",
+          "--display-table-size": "18px",
           "--display-cell-pad-y": "7px",
           "--display-cell-pad-x": "8px",
           "--display-empty-size": "15px",
@@ -561,31 +561,41 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
       });
     }
 
-    function updateBarChartDisplay(chart) {
+    function updateBarChartDisplay(chart, chartId) {
       const m = currentDisplayProfile.chart;
+      const isPurposeChart = chartId === "c_purpose";
+      const categoryFontSize = isPurposeChart ? m.barCategoryFontSize * 1.2 : m.barCategoryFontSize;
+      const categoryWidth = isPurposeChart ? m.barLabelWidth * 1.2 : m.barLabelWidth;
+      const categoryLineHeight = isPurposeChart ? m.barLabelLineHeight * 1.2 : m.barLabelLineHeight;
+      const seriesLabelFontSize = isPurposeChart ? m.seriesLabelFontSize * 1.2 : m.seriesLabelFontSize;
       chart.setOption({
         grid: {left: m.barGridLeft, right: m.barGridRight, top: m.barGridTop, bottom: m.barGridBottom, containLabel: false},
         tooltip: {textStyle: {fontSize: m.tooltipFontSize}},
         xAxis: {axisLabel: {fontSize: m.axisFontSize, margin: m.axisMargin}},
         yAxis: {
           axisLabel: {
-            fontSize: m.barCategoryFontSize,
-            width: m.barLabelWidth,
-            lineHeight: m.barLabelLineHeight
+            fontSize: categoryFontSize,
+            width: categoryWidth,
+            lineHeight: categoryLineHeight
           }
         },
         series: [{
-          label: {fontSize: m.seriesLabelFontSize}
+          label: {fontSize: seriesLabelFontSize}
         }]
       });
     }
 
-    function updatePieChartDisplay(chart) {
+    function updatePieChartDisplay(chart, chartId) {
       const m = currentDisplayProfile.chart;
+      const isStatusChart = chartId === "c_status";
+      const legendFontSize = isStatusChart ? m.pieLegendFontSize * 1.2 : m.pieLegendFontSize;
+      const labelFontSize = isStatusChart ? m.pieLabelFontSize * 1.2 : m.pieLabelFontSize;
+      const labelWidth = isStatusChart ? m.pieLabelWidth * 1.2 : m.pieLabelWidth;
+      const labelLineHeight = isStatusChart ? m.pieLabelLineHeight * 1.2 : m.pieLabelLineHeight;
       chart.setOption({
         tooltip: {textStyle: {fontSize: m.tooltipFontSize}},
         legend: {
-          textStyle: {fontSize: m.pieLegendFontSize},
+          textStyle: {fontSize: legendFontSize},
           itemWidth: m.pieLegendItemWidth,
           itemHeight: m.pieLegendItemHeight
         },
@@ -593,9 +603,9 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           radius: m.pieRadius,
           center: m.pieCenter,
           label: {
-            fontSize: m.pieLabelFontSize,
-            width: m.pieLabelWidth,
-            lineHeight: m.pieLabelLineHeight
+            fontSize: labelFontSize,
+            width: labelWidth,
+            lineHeight: labelLineHeight
           },
           labelLine: {
             length: m.pieLabelLineLength,
@@ -615,11 +625,11 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
           return;
         }
         if (id === "c_purpose" || id === "c_department") {
-          updateBarChartDisplay(chart);
+          updateBarChartDisplay(chart, id);
           return;
         }
         if (id === "c_status" || id === "c_print") {
-          updatePieChartDisplay(chart);
+          updatePieChartDisplay(chart, id);
         }
       });
     }

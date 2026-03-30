@@ -180,7 +180,7 @@
       pointer-events: none !important;
     }
 
-    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 10.5px; }
+    table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.6px; }
     th, td {
       text-align: left;
       padding: 4px 4px;
@@ -287,7 +287,7 @@
         min-height: 120px;
       }
       table {
-        font-size: 10px;
+        font-size: 12px;
       }
       th, td {
         padding: 3px 4px;
@@ -343,7 +343,7 @@
       .panel { overflow: auto; }
       .chart { min-height: 240px; }
       .table-wrap { height: auto; overflow: auto; }
-      table { min-width: 520px; font-size: 12px; }
+      table { min-width: 520px; font-size: 14.4px; }
       th, td { padding: 5px 6px; }
     }
 
@@ -351,7 +351,7 @@
       .title { font-size: clamp(20px, 6.2vw, 28px); }
       .cards { grid-template-columns: 1fr 1fr; }
       .meta { display: grid; grid-template-columns: 1fr; }
-      table { min-width: 460px; font-size: 11px; }
+      table { min-width: 460px; font-size: 13.2px; }
     }
   </style>
 </head>
@@ -594,6 +594,11 @@
       const chart = getChart(id);
       const names = (items || []).map(i => i.name);
       const values = (items || []).map(i => i.count);
+      const isPurposeChart = id === "c_purpose";
+      const categoryFontSize = isPurposeChart ? 10.8 : 9;
+      const categoryWidth = isPurposeChart ? 98 : 82;
+      const categoryLineHeight = isPurposeChart ? 13.2 : 11;
+      const valueFontSize = isPurposeChart ? 12 : 10;
       chart.setOption({
         animation: false,
         grid: {left: 86, right: 18, top: 22, bottom: 24, containLabel: false},
@@ -616,10 +621,10 @@
           data: names,
           axisLabel: {
             color: "#5f7084",
-            fontSize: 9,
-            width: 82,
+            fontSize: categoryFontSize,
+            width: categoryWidth,
             overflow: "break",
-            lineHeight: 11,
+            lineHeight: categoryLineHeight,
             formatter: (value) => wrapAxisLabel(value, 8, 2)
           }
         },
@@ -627,7 +632,7 @@
           type: "bar",
           data: values,
           itemStyle: {color, borderRadius: [0, 7, 7, 0]},
-          label: {show: true, position: "right", color: "#32475a", fontSize: 10}
+          label: {show: true, position: "right", color: "#32475a", fontSize: valueFontSize}
         }]
       });
       return elevateChartLayer(chart);
@@ -635,6 +640,11 @@
 
     function pieChart(id, items) {
       const chart = getChart(id);
+      const isStatusChart = id === "c_status";
+      const legendFontSize = isStatusChart ? 12 : 10;
+      const labelFontSize = isStatusChart ? 10.8 : 9;
+      const labelWidth = isStatusChart ? 134 : 112;
+      const labelLineHeight = isStatusChart ? 14.4 : 12;
       chart.setOption({
         animation: false,
         tooltip: {
@@ -645,7 +655,7 @@
           className: "global-echart-tooltip",
           extraCssText: "z-index:2147483647;pointer-events:none;"
         },
-        legend: {bottom: 0, textStyle: {color: "#5f7084", fontSize: 10}},
+        legend: {bottom: 0, textStyle: {color: "#5f7084", fontSize: legendFontSize}},
         series: [{
           type: "pie",
           radius: ["28%", "58%"],
@@ -656,10 +666,10 @@
             show: true,
             formatter: "{b}: {c}",
             color: "#3a4d60",
-            fontSize: 9,
-            width: 112,
+            fontSize: labelFontSize,
+            width: labelWidth,
             overflow: "break",
-            lineHeight: 12
+            lineHeight: labelLineHeight
           },
           labelLine: {length: 8, length2: 6},
           labelLayout: {hideOverlap: false}
