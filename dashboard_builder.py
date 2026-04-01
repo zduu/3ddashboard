@@ -17,21 +17,21 @@ RESOLUTION_ADAPTIVE_CSS = """
       --display-title-fluid: 2.45vw;
       --display-title-max: 38px;
       --display-meta-size: 13px;
-      --display-meta-gap: 6px;
+      --display-meta-gap: 5px;
       --display-pill-pad-y: 2px;
-      --display-pill-pad-x: 9px;
-      --display-card-gap: 12px;
-      --display-card-pad-y: 10px;
-      --display-card-pad-x: 12px;
+      --display-pill-pad-x: 8px;
+      --display-card-gap: 10px;
+      --display-card-pad-y: 9px;
+      --display-card-pad-x: 11px;
       --display-card-key-size: 24px;
       --display-card-value-min: 44px;
       --display-card-value-fluid: 4.4vw;
       --display-card-value-max: 60px;
-      --display-panel-pad-top: 7px;
-      --display-panel-pad-side: 8px;
-      --display-panel-pad-bottom: 8px;
+      --display-panel-pad-top: 6px;
+      --display-panel-pad-side: 7px;
+      --display-panel-pad-bottom: 7px;
       --display-panel-title-size: 13px;
-      --display-panel-title-gap: 4px;
+      --display-panel-title-gap: 3px;
       --display-table-size: 12.6px;
       --display-cell-pad-y: 4px;
       --display-cell-pad-x: 4px;
@@ -153,28 +153,28 @@ RESOLUTION_ADAPTIVE_CSS = """
     }
     @media (max-height: 920px) {
       body[data-display-profile="base"] {
-        --outer-pad: 12px;
-        --seam-pad: 20px;
-        --panel-gap: 10px;
+        --outer-pad: 10px;
+        --seam-pad: 16px;
+        --panel-gap: 8px;
         --display-title-min: 22px;
         --display-title-fluid: 2.05vw;
         --display-title-max: 32px;
         --display-meta-size: 12px;
-        --display-meta-gap: 4px;
+        --display-meta-gap: 3px;
         --display-pill-pad-y: 2px;
-        --display-pill-pad-x: 7px;
-        --display-card-gap: 10px;
-        --display-card-pad-y: 8px;
-        --display-card-pad-x: 10px;
+        --display-pill-pad-x: 6px;
+        --display-card-gap: 8px;
+        --display-card-pad-y: 7px;
+        --display-card-pad-x: 9px;
         --display-card-key-size: 22px;
         --display-card-value-min: 36px;
         --display-card-value-fluid: 3.6vw;
         --display-card-value-max: 48px;
-        --display-panel-pad-top: 6px;
-        --display-panel-pad-side: 7px;
-        --display-panel-pad-bottom: 7px;
+        --display-panel-pad-top: 5px;
+        --display-panel-pad-side: 6px;
+        --display-panel-pad-bottom: 6px;
         --display-panel-title-size: 12px;
-        --display-panel-title-gap: 3px;
+        --display-panel-title-gap: 2px;
         --display-table-size: 12px;
         --display-cell-pad-y: 3px;
         --display-cell-pad-x: 4px;
@@ -187,7 +187,7 @@ RESOLUTION_ADAPTIVE_CSS = """
     }
     @media (max-height: 820px) {
       body[data-display-profile="base"] {
-        --display-card-gap: 8px;
+        --display-card-gap: 6px;
         --display-title-min: 20px;
         --display-title-fluid: 1.8vw;
         --display-title-max: 28px;
@@ -209,28 +209,28 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
         minWidth: 0,
         minHeight: 0,
         cssVars: {
-          "--outer-pad": "18px",
-          "--seam-pad": "30px",
-          "--panel-gap": "14px",
+          "--outer-pad": "14px",
+          "--seam-pad": "20px",
+          "--panel-gap": "10px",
           "--display-title-min": "26px",
           "--display-title-fluid": "2.45vw",
           "--display-title-max": "38px",
           "--display-meta-size": "13px",
-          "--display-meta-gap": "6px",
+          "--display-meta-gap": "5px",
           "--display-pill-pad-y": "2px",
-          "--display-pill-pad-x": "9px",
-          "--display-card-gap": "12px",
-          "--display-card-pad-y": "10px",
-          "--display-card-pad-x": "12px",
+          "--display-pill-pad-x": "8px",
+          "--display-card-gap": "10px",
+          "--display-card-pad-y": "9px",
+          "--display-card-pad-x": "11px",
           "--display-card-key-size": "24px",
           "--display-card-value-min": "44px",
           "--display-card-value-fluid": "4.4vw",
           "--display-card-value-max": "60px",
-          "--display-panel-pad-top": "7px",
-          "--display-panel-pad-side": "8px",
-          "--display-panel-pad-bottom": "8px",
+          "--display-panel-pad-top": "6px",
+          "--display-panel-pad-side": "7px",
+          "--display-panel-pad-bottom": "7px",
           "--display-panel-title-size": "13px",
-          "--display-panel-title-gap": "4px",
+          "--display-panel-title-gap": "3px",
           "--display-table-size": "12.6px",
           "--display-cell-pad-y": "4px",
           "--display-cell-pad-x": "4px",
@@ -275,28 +275,28 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
         minWidth: 2048,
         minHeight: 1280,
         cssVars: {
-          "--outer-pad": "16px",
-          "--seam-pad": "18px",
-          "--panel-gap": "10px",
+          "--outer-pad": "12px",
+          "--seam-pad": "14px",
+          "--panel-gap": "8px",
           "--display-title-min": "30px",
           "--display-title-fluid": "2.15vw",
           "--display-title-max": "46px",
           "--display-meta-size": "15px",
-          "--display-meta-gap": "8px",
+          "--display-meta-gap": "6px",
           "--display-pill-pad-y": "3px",
-          "--display-pill-pad-x": "11px",
-          "--display-card-gap": "14px",
-          "--display-card-pad-y": "12px",
-          "--display-card-pad-x": "14px",
+          "--display-pill-pad-x": "9px",
+          "--display-card-gap": "12px",
+          "--display-card-pad-y": "10px",
+          "--display-card-pad-x": "12px",
           "--display-card-key-size": "27px",
           "--display-card-value-min": "52px",
           "--display-card-value-fluid": "4.1vw",
           "--display-card-value-max": "72px",
-          "--display-panel-pad-top": "8px",
-          "--display-panel-pad-side": "9px",
-          "--display-panel-pad-bottom": "9px",
+          "--display-panel-pad-top": "7px",
+          "--display-panel-pad-side": "8px",
+          "--display-panel-pad-bottom": "8px",
           "--display-panel-title-size": "14.5px",
-          "--display-panel-title-gap": "4px",
+          "--display-panel-title-gap": "3px",
           "--display-table-size": "13.8px",
           "--display-cell-pad-y": "5px",
           "--display-cell-pad-x": "5px",
@@ -341,28 +341,28 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
         minWidth: 3200,
         minHeight: 1800,
         cssVars: {
-          "--outer-pad": "32px",
-          "--seam-pad": "48px",
-          "--panel-gap": "22px",
+          "--outer-pad": "22px",
+          "--seam-pad": "30px",
+          "--panel-gap": "16px",
           "--display-title-min": "42px",
           "--display-title-fluid": "2.15vw",
           "--display-title-max": "74px",
           "--display-meta-size": "20px",
-          "--display-meta-gap": "12px",
+          "--display-meta-gap": "10px",
           "--display-pill-pad-y": "5px",
-          "--display-pill-pad-x": "15px",
-          "--display-card-gap": "20px",
-          "--display-card-pad-y": "18px",
-          "--display-card-pad-x": "20px",
+          "--display-pill-pad-x": "13px",
+          "--display-card-gap": "16px",
+          "--display-card-pad-y": "15px",
+          "--display-card-pad-x": "17px",
           "--display-card-key-size": "36px",
           "--display-card-value-min": "76px",
           "--display-card-value-fluid": "4vw",
           "--display-card-value-max": "116px",
-          "--display-panel-pad-top": "14px",
-          "--display-panel-pad-side": "16px",
-          "--display-panel-pad-bottom": "16px",
+          "--display-panel-pad-top": "11px",
+          "--display-panel-pad-side": "12px",
+          "--display-panel-pad-bottom": "12px",
           "--display-panel-title-size": "20px",
-          "--display-panel-title-gap": "8px",
+          "--display-panel-title-gap": "6px",
           "--display-table-size": "18.6px",
           "--display-cell-pad-y": "7px",
           "--display-cell-pad-x": "8px",
@@ -407,28 +407,28 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
         minWidth: 4480,
         minHeight: 2520,
         cssVars: {
-          "--outer-pad": "34px",
-          "--seam-pad": "52px",
-          "--panel-gap": "24px",
+          "--outer-pad": "24px",
+          "--seam-pad": "34px",
+          "--panel-gap": "18px",
           "--display-title-min": "42px",
           "--display-title-fluid": "1.75vw",
           "--display-title-max": "70px",
           "--display-meta-size": "19px",
-          "--display-meta-gap": "12px",
+          "--display-meta-gap": "10px",
           "--display-pill-pad-y": "5px",
-          "--display-pill-pad-x": "15px",
-          "--display-card-gap": "22px",
-          "--display-card-pad-y": "18px",
-          "--display-card-pad-x": "20px",
+          "--display-pill-pad-x": "13px",
+          "--display-card-gap": "18px",
+          "--display-card-pad-y": "15px",
+          "--display-card-pad-x": "17px",
           "--display-card-key-size": "34px",
           "--display-card-value-min": "76px",
           "--display-card-value-fluid": "3.3vw",
           "--display-card-value-max": "112px",
-          "--display-panel-pad-top": "14px",
-          "--display-panel-pad-side": "17px",
-          "--display-panel-pad-bottom": "17px",
+          "--display-panel-pad-top": "11px",
+          "--display-panel-pad-side": "13px",
+          "--display-panel-pad-bottom": "13px",
           "--display-panel-title-size": "19px",
-          "--display-panel-title-gap": "8px",
+          "--display-panel-title-gap": "6px",
           "--display-table-size": "18px",
           "--display-cell-pad-y": "7px",
           "--display-cell-pad-x": "8px",
@@ -643,6 +643,9 @@ RESOLUTION_ADAPTIVE_SCRIPT = """
         }
       });
       updateChartsForDisplayProfile();
+      if (typeof refreshTables === "function") {
+        refreshTables();
+      }
     }
 
     function scheduleDisplaySync(delay = 60) {
@@ -1411,10 +1414,14 @@ def inject_resolution_adaptation(template_text: str) -> str:
         '    document.addEventListener("fullscreenchange", () => {\n'
         "      applyViewportMode();\n"
         "      Object.values(chartMap).forEach(c => c && c.resize());\n"
+        "      startSpotlightCycle();\n"
+        "      startChartSpotlightCycle();\n"
         "    });\n",
         '    document.addEventListener("fullscreenchange", () => {\n'
         "      applyViewportMode();\n"
         "      Object.values(chartMap).forEach(c => c && c.resize());\n"
+        "      startSpotlightCycle();\n"
+        "      startChartSpotlightCycle();\n"
         "      scheduleDisplaySync(120);\n"
         "    });\n"
         '    window.addEventListener("resize", () => {\n'

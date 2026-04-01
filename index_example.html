@@ -20,9 +20,9 @@
       --accent-2: #1f8ed8;
       --accent-3: #3f9142;
       --shadow: 0 10px 26px rgba(7,35,66,.12);
-      --outer-pad: 18px;
-      --seam-pad: 30px;
-      --panel-gap: 14px;
+      --outer-pad: 14px;
+      --seam-pad: 20px;
+      --panel-gap: 10px;
     }
     * { box-sizing: border-box; }
     html, body { width: 100%; height: 100%; }
@@ -60,34 +60,225 @@
     .quad-dist { padding: var(--seam-pad) var(--seam-pad) var(--outer-pad) var(--outer-pad); }
     .quad-tables { padding: var(--seam-pad) var(--outer-pad) var(--outer-pad) var(--seam-pad); }
     .hero-block {
-      padding: 14px 16px 12px;
+      padding: 12px 14px 10px;
       border: 1px solid var(--line);
       border-radius: 14px;
-      background: rgba(255,255,255,.70);
+      background:
+        linear-gradient(135deg, rgba(255,255,255,.88), rgba(255,255,255,.68)),
+        radial-gradient(120% 150% at 100% 0%, rgba(255,106,61,.12), transparent 52%),
+        radial-gradient(100% 120% at 0% 100%, rgba(31,142,216,.12), transparent 56%);
       box-shadow: var(--shadow);
       backdrop-filter: blur(8px);
+      position: relative;
+      overflow: hidden;
+    }
+    .hero-block::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 4px;
+      background: linear-gradient(90deg, rgba(31,142,216,.95), rgba(255,106,61,.86));
+      pointer-events: none;
+    }
+    .hero-block::after {
+      content: "";
+      position: absolute;
+      right: -40px;
+      top: -38px;
+      width: 150px;
+      height: 150px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(255,106,61,.16) 0%, rgba(255,106,61,0) 70%);
+      pointer-events: none;
+    }
+    .hero-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 8px;
+      position: relative;
+      z-index: 1;
+    }
+    .hero-kicker {
+      display: inline-flex;
+      align-items: center;
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: .16em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #1f5f8e;
+      background: rgba(239,249,255,.88);
+      border: 1px solid rgba(31,142,216,.16);
+      box-shadow: 0 4px 10px rgba(10,31,58,.05);
+    }
+    .hero-badge {
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-height: 24px;
+      padding: 0 10px;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 1;
+      letter-spacing: .12em;
+      text-transform: uppercase;
+      font-weight: 700;
+      color: #9f4d34;
+      background: rgba(255,245,239,.88);
+      border: 1px solid rgba(255,106,61,.16);
+      box-shadow: 0 4px 10px rgba(10,31,58,.05);
     }
     .title {
       margin: 0;
       font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
       font-size: clamp(26px, 2.45vw, 38px);
       line-height: 1.05;
-      letter-spacing: -0.02em;
+      letter-spacing: -0.03em;
+      color: #10273c;
+      position: relative;
+      z-index: 1;
+      text-shadow: 0 10px 24px rgba(16,39,60,.08);
     }
     .meta {
-      margin-top: 4px;
+      margin-top: 6px;
       color: var(--muted);
       font-size: 13px;
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
+      gap: 5px;
+      position: relative;
+      z-index: 1;
     }
     .pill {
       border:1px solid var(--line);
       border-radius:999px;
-      padding:2px 9px;
-      background:rgba(255,255,255,.65);
+      padding:2px 8px;
+      background:rgba(255,255,255,.72);
       white-space: nowrap;
+      box-shadow: 0 4px 10px rgba(10,31,58,.04);
+    }
+    .pill-meta-time,
+    .pill-meta-latest {
+      color: #225f8d;
+      border-color: rgba(31,142,216,.14);
+      background: rgba(239,249,255,.86);
+    }
+    .pill-meta-source {
+      color: #465a6c;
+      border-color: rgba(84,104,123,.12);
+      background: rgba(245,248,250,.86);
+    }
+    .pill-meta-range {
+      color: #9a5336;
+      border-color: rgba(255,138,84,.14);
+      background: rgba(255,246,240,.88);
+    }
+    .hero-badge[data-state="live"] {
+      color: #1f5f8e;
+      background: rgba(239,249,255,.88);
+      border-color: rgba(31,142,216,.16);
+    }
+    .hero-badge[data-state="loading"] {
+      color: #9a5336;
+      background: rgba(255,246,240,.9);
+      border-color: rgba(255,138,84,.18);
+      animation: refreshPulse 1s ease-in-out infinite;
+    }
+    .hero-badge[data-state="success"] {
+      color: #2e6f31;
+      background: rgba(243,251,243,.92);
+      border-color: rgba(63,145,66,.16);
+    }
+    .hero-badge[data-state="static"] {
+      color: #465a6c;
+      background: rgba(245,248,250,.9);
+      border-color: rgba(84,104,123,.14);
+    }
+    .hero-badge[data-state="error"] {
+      color: #a3472f;
+      background: rgba(255,244,238,.92);
+      border-color: rgba(255,106,61,.16);
+    }
+
+    @keyframes dashboardFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes refreshPulse {
+      0%, 100% {
+        box-shadow: 0 4px 10px rgba(10,31,58,.05);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 8px 18px rgba(255,106,61,.18);
+        transform: scale(1.02);
+      }
+    }
+    body.motion-ready .hero-block {
+      animation: dashboardFadeUp .55s ease-out both;
+    }
+    body.motion-ready .card,
+    body.motion-ready .panel {
+      animation: dashboardFadeUp .5s ease-out both;
+    }
+    body.motion-ready .cards .card:nth-child(1) { animation-delay: .04s; }
+    body.motion-ready .cards .card:nth-child(2) { animation-delay: .08s; }
+    body.motion-ready .cards .card:nth-child(3) { animation-delay: .12s; }
+    body.motion-ready .cards .card:nth-child(4) { animation-delay: .16s; }
+    body.motion-ready .cards .card:nth-child(5) { animation-delay: .20s; }
+    body.motion-ready .cards .card:nth-child(6) { animation-delay: .24s; }
+    body.motion-ready .panel-grid .panel:nth-child(1) { animation-delay: .10s; }
+    body.motion-ready .panel-grid .panel:nth-child(2) { animation-delay: .14s; }
+    body.motion-ready .panel-grid .panel:nth-child(3) { animation-delay: .18s; }
+    body.motion-ready .panel-grid .panel:nth-child(4) { animation-delay: .22s; }
+    .spotlight-target {
+      transition:
+        transform .32s ease,
+        box-shadow .32s ease,
+        border-color .32s ease,
+        filter .32s ease;
+    }
+    .spotlight-active {
+      transform: translateY(-3px);
+      box-shadow: 0 18px 34px rgba(10,31,58,.18) !important;
+      border-color: rgba(31,142,216,.24) !important;
+      filter: saturate(1.04);
+    }
+    .card.spotlight-active::before {
+      width: 8px;
+    }
+    .panel.spotlight-active::before {
+      height: 5px;
+    }
+    .hero-block.spotlight-active {
+      box-shadow: 0 20px 38px rgba(10,31,58,.16);
+      border-color: rgba(31,142,216,.18);
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.motion-ready .hero-block,
+      body.motion-ready .card,
+      body.motion-ready .panel,
+      .hero-badge[data-state="loading"] {
+        animation: none !important;
+      }
+      .spotlight-target,
+      .spotlight-active {
+        transition: none !important;
+        transform: none !important;
+      }
     }
 
     .cards {
@@ -96,7 +287,7 @@
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       grid-auto-rows: minmax(0, 1fr);
-      gap: 12px;
+      gap: 10px;
       overflow: hidden;
       align-content: start;
     }
@@ -105,17 +296,181 @@
       border: 1px solid var(--line);
       border-radius: 12px;
       box-shadow: var(--shadow);
-      padding: 10px 12px;
+      padding: 9px 11px;
       backdrop-filter: blur(8px);
       min-height: 0;
+      position: relative;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
+      gap: 8px;
+      background:
+        linear-gradient(180deg, rgba(255,255,255,.92), rgba(255,255,255,.74)),
+        radial-gradient(120% 120% at 0% 0%, rgba(255,255,255,.55), transparent 62%);
     }
-    .k { font-size: 12px; color: var(--muted); }
+    .card-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 8px;
+      position: relative;
+      z-index: 1;
+    }
+    .card::before {
+      content: "";
+      position: absolute;
+      inset: 0 auto 0 0;
+      width: 6px;
+      border-radius: 12px 0 0 12px;
+      background: linear-gradient(180deg, #1f8ed8, #7fc8ff);
+      opacity: .92;
+    }
+    .card::after {
+      content: "";
+      position: absolute;
+      right: -22px;
+      top: -18px;
+      width: 82px;
+      height: 82px;
+      border-radius: 50%;
+      background: radial-gradient(circle, rgba(31,142,216,.16) 0%, rgba(31,142,216,0) 72%);
+      pointer-events: none;
+    }
+    .k {
+      font-size: 12px;
+      color: var(--muted);
+      line-height: 1.18;
+      font-weight: 600;
+      max-width: calc(100% - 44px);
+    }
+    .card-mark {
+      flex: 0 0 auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      min-width: 36px;
+      min-height: 22px;
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      font-weight: 700;
+      letter-spacing: .08em;
+      text-transform: uppercase;
+      color: rgba(19,41,62,.82);
+      background: rgba(255,255,255,.72);
+      border: 1px solid rgba(15,34,56,.10);
+      box-shadow: 0 4px 10px rgba(10,31,58,.05);
+      position: relative;
+      z-index: 1;
+    }
+    .card-body {
+      display: flex;
+      align-items: flex-end;
+      justify-content: space-between;
+      gap: 10px;
+      position: relative;
+      z-index: 1;
+    }
     .v {
-      margin-top: 2px;
+      margin-top: 0;
       font-family: "Space Grotesk", sans-serif;
       font-size: clamp(22px, 2.2vw, 30px);
       font-weight: 700;
-      line-height: 1.05;
+      line-height: .92;
+      color: #13293e;
+      letter-spacing: -.03em;
+      text-shadow: 0 10px 22px rgba(16,39,60,.10);
+    }
+    .card-unit {
+      flex: 0 0 auto;
+      font-size: 12px;
+      line-height: 1;
+      font-weight: 700;
+      color: rgba(19,41,62,.52);
+      padding-bottom: 4px;
+      letter-spacing: .08em;
+    }
+    .card-footer {
+      position: relative;
+      z-index: 1;
+      height: 4px;
+      border-radius: 999px;
+      overflow: hidden;
+      background: rgba(15,34,56,.06);
+    }
+    .card-footer::before {
+      content: "";
+      display: block;
+      width: 72%;
+      height: 100%;
+      border-radius: inherit;
+      background: linear-gradient(90deg, rgba(31,142,216,.94), rgba(127,200,255,.72));
+    }
+    .card-tone-total::before,
+    .card-tone-today::before {
+      background: linear-gradient(180deg, #ff6a3d, #ffb273);
+    }
+    .card-tone-total::after,
+    .card-tone-today::after {
+      background: radial-gradient(circle, rgba(255,106,61,.16) 0%, rgba(255,106,61,0) 72%);
+    }
+    .card-tone-waiting::before {
+      background: linear-gradient(180deg, #ff8a54, #ffd4bc);
+    }
+    .card-tone-printing::before {
+      background: linear-gradient(180deg, #1f8ed8, #87d3ff);
+    }
+    .card-tone-pickup::before {
+      background: linear-gradient(180deg, #3f9142, #9fdb9f);
+    }
+    .card-tone-month::before {
+      background: linear-gradient(180deg, #54687b, #b7c4cf);
+    }
+    .card-tone-total .card-mark,
+    .card-tone-today .card-mark {
+      color: #a3472f;
+      border-color: rgba(255,106,61,.16);
+      background: rgba(255,245,239,.84);
+    }
+    .card-tone-month .card-mark {
+      color: #475b6d;
+      border-color: rgba(84,104,123,.14);
+      background: rgba(245,248,250,.84);
+    }
+    .card-tone-waiting .card-mark {
+      color: #af5436;
+      border-color: rgba(255,138,84,.16);
+      background: rgba(255,244,238,.84);
+    }
+    .card-tone-printing .card-mark {
+      color: #22618e;
+      border-color: rgba(31,142,216,.16);
+      background: rgba(239,249,255,.84);
+    }
+    .card-tone-pickup .card-mark {
+      color: #2f7131;
+      border-color: rgba(63,145,66,.14);
+      background: rgba(243,251,243,.84);
+    }
+    .card-tone-total .card-footer::before,
+    .card-tone-today .card-footer::before {
+      background: linear-gradient(90deg, rgba(255,106,61,.94), rgba(255,178,115,.72));
+    }
+    .card-tone-month .card-footer::before {
+      background: linear-gradient(90deg, rgba(84,104,123,.88), rgba(183,196,207,.72));
+    }
+    .card-tone-waiting .card-footer::before {
+      width: 58%;
+      background: linear-gradient(90deg, rgba(255,138,84,.92), rgba(255,212,188,.75));
+    }
+    .card-tone-printing .card-footer::before {
+      width: 66%;
+      background: linear-gradient(90deg, rgba(31,142,216,.92), rgba(135,211,255,.76));
+    }
+    .card-tone-pickup .card-footer::before {
+      width: 82%;
+      background: linear-gradient(90deg, rgba(63,145,66,.92), rgba(159,219,159,.78));
     }
 
     .panel-grid {
@@ -138,26 +493,142 @@
     }
 
     .panel {
+      --panel-accent-a: #1f8ed8;
+      --panel-accent-b: #ff5a36;
+      --panel-glow: rgba(31,142,216,.12);
+      --panel-title-bg: rgba(255,255,255,.76);
+      --panel-title-fg: #193149;
       min-height: 0;
       background: var(--card);
       border: 1px solid var(--line);
       border-radius: 12px;
       box-shadow: var(--shadow);
-      padding: 7px 8px 8px;
+      padding: 6px 7px 7px;
       overflow: hidden;
       display: grid;
       grid-template-rows: auto minmax(0, 1fr);
       position: relative;
       z-index: 1;
     }
+    .panel::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 4px;
+      border-radius: 12px 12px 0 0;
+      background: linear-gradient(90deg, var(--panel-accent-a), var(--panel-accent-b));
+      opacity: .96;
+      pointer-events: none;
+    }
+    .panel::after {
+      content: "";
+      position: absolute;
+      right: -34px;
+      top: -28px;
+      width: 132px;
+      height: 132px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--panel-glow) 0%, rgba(255,255,255,0) 72%);
+      pointer-events: none;
+    }
     .panel.chart-panel {
       overflow: visible;
       z-index: 20;
     }
     .panel h3 {
-      margin: 0 2px 4px;
+      margin: 0 1px 5px;
       font-size: 13px;
       line-height: 1.2;
+      display: inline-flex;
+      align-items: center;
+      align-self: start;
+      min-height: 24px;
+      padding: 0 9px;
+      border-radius: 999px;
+      color: var(--panel-title-fg);
+      background: var(--panel-title-bg);
+      border: 1px solid color-mix(in srgb, var(--panel-accent-a) 18%, rgba(15,34,56,.10));
+      box-shadow: 0 6px 14px rgba(10,31,58,.06);
+    }
+    .panel-sub {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      min-height: 22px;
+      max-width: calc(100% - 118px);
+      padding: 0 8px;
+      border-radius: 999px;
+      font-size: 10px;
+      line-height: 1;
+      color: rgba(25,49,73,.74);
+      background: rgba(255,255,255,.56);
+      border: 1px solid rgba(15,34,56,.08);
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      box-shadow: 0 4px 10px rgba(10,31,58,.04);
+      z-index: 2;
+    }
+    .panel-tone-order-trend {
+      --panel-accent-a: #ff6a3d;
+      --panel-accent-b: #ffb273;
+      --panel-glow: rgba(255,106,61,.16);
+      --panel-title-bg: rgba(255,245,238,.92);
+      --panel-title-fg: #8d3b27;
+    }
+    .panel-tone-action-trend {
+      --panel-accent-a: #1f8ed8;
+      --panel-accent-b: #86d7ff;
+      --panel-glow: rgba(31,142,216,.16);
+      --panel-title-bg: rgba(239,249,255,.92);
+      --panel-title-fg: #1f5e8b;
+    }
+    .panel-tone-status {
+      --panel-accent-a: #3f9142;
+      --panel-accent-b: #9ddb93;
+      --panel-glow: rgba(63,145,66,.16);
+      --panel-title-bg: rgba(243,251,243,.92);
+      --panel-title-fg: #2e6f31;
+    }
+    .panel-tone-print {
+      --panel-accent-a: #54687b;
+      --panel-accent-b: #aab9c5;
+      --panel-glow: rgba(84,104,123,.16);
+      --panel-title-bg: rgba(245,248,250,.92);
+      --panel-title-fg: #405466;
+    }
+    .panel-tone-purpose {
+      --panel-accent-a: #ff8a54;
+      --panel-accent-b: #ffd19c;
+      --panel-glow: rgba(255,138,84,.16);
+      --panel-title-bg: rgba(255,247,240,.92);
+      --panel-title-fg: #9a5336;
+    }
+    .panel-tone-department {
+      --panel-accent-a: #2d80c2;
+      --panel-accent-b: #9fd2ff;
+      --panel-glow: rgba(45,128,194,.16);
+      --panel-title-bg: rgba(241,248,255,.92);
+      --panel-title-fg: #235c88;
+    }
+    .panel-tone-orders {
+      --panel-accent-a: #1f8ed8;
+      --panel-accent-b: #6fc8ff;
+      --panel-glow: rgba(31,142,216,.15);
+      --panel-title-bg: rgba(240,248,255,.92);
+      --panel-title-fg: #225f8d;
+    }
+    .panel-tone-actions {
+      --panel-accent-a: #3f9142;
+      --panel-accent-b: #9ddb93;
+      --panel-glow: rgba(63,145,66,.15);
+      --panel-title-bg: rgba(244,252,244,.92);
+      --panel-title-fg: #2e6f31;
     }
     .chart {
       width: 100%;
@@ -175,12 +646,29 @@
       z-index: 500 !important;
     }
     .table-wrap { min-height: 0; overflow: auto; }
+    .table-wrap {
+      scrollbar-gutter: stable both-edges;
+    }
     .global-echart-tooltip {
       z-index: 2147483647 !important;
       pointer-events: none !important;
     }
 
     table { width: 100%; border-collapse: collapse; table-layout: fixed; font-size: 12.6px; }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(255,255,255,.92);
+      backdrop-filter: blur(6px);
+      box-shadow: inset 0 -1px 0 rgba(15,34,56,.08);
+    }
+    tbody tr:nth-child(even) td {
+      background: rgba(255,255,255,.28);
+    }
+    tbody tr:hover td {
+      background: rgba(31,142,216,.08);
+    }
     th, td {
       text-align: left;
       padding: 4px 4px;
@@ -191,6 +679,103 @@
     }
     th { color: var(--muted); font-weight: 500; }
     .empty { color:#8190a0; padding:8px 4px; font-size:11px; }
+    .table-code {
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      letter-spacing: .03em;
+      color: #173149;
+      white-space: nowrap;
+    }
+    .table-time {
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      color: #586c82;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: .18em .62em;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: normal;
+      background: rgba(95,112,132,.10);
+      color: #3b4e61;
+    }
+    .badge-status-waiting {
+      background: rgba(255,90,54,.12);
+      color: #c1482f;
+      border-color: rgba(255,90,54,.22);
+    }
+    .badge-status-printing {
+      background: rgba(31,142,216,.14);
+      color: #1c6ea8;
+      border-color: rgba(31,142,216,.24);
+    }
+    .badge-status-pickup {
+      background: rgba(63,145,66,.14);
+      color: #2d7b30;
+      border-color: rgba(63,145,66,.22);
+    }
+    .badge-status-complete {
+      background: rgba(56,80,101,.10);
+      color: #385065;
+      border-color: rgba(56,80,101,.18);
+    }
+    .badge-status-refused,
+    .badge-status-canceled {
+      background: rgba(110,126,143,.14);
+      color: #5d6d7e;
+      border-color: rgba(110,126,143,.20);
+    }
+    .badge-purpose-project {
+      background: rgba(31,142,216,.12);
+      color: #1f70a7;
+      border-color: rgba(31,142,216,.22);
+    }
+    .badge-purpose-course {
+      background: rgba(63,145,66,.12);
+      color: #2c7b30;
+      border-color: rgba(63,145,66,.20);
+    }
+    .badge-purpose-contest {
+      background: rgba(255,90,54,.12);
+      color: #c24f36;
+      border-color: rgba(255,90,54,.22);
+    }
+    .badge-tech-fdm,
+    .badge-tech-fff {
+      background: rgba(15,34,56,.08);
+      color: #29425a;
+      border-color: rgba(15,34,56,.12);
+    }
+    .badge-tech-sla,
+    .badge-tech-sls {
+      background: rgba(45,128,194,.12);
+      color: #205f92;
+      border-color: rgba(45,128,194,.20);
+    }
+    .badge-action-approve,
+    .badge-action-done,
+    .badge-action-complete {
+      background: rgba(63,145,66,.12);
+      color: #2d7b30;
+      border-color: rgba(63,145,66,.20);
+    }
+    .badge-action-refuse,
+    .badge-action-exception {
+      background: rgba(255,90,54,.12);
+      color: #c1482f;
+      border-color: rgba(255,90,54,.22);
+    }
+    .badge-person {
+      background: rgba(31,142,216,.10);
+      color: #285c86;
+      border-color: rgba(31,142,216,.18);
+    }
 
     body.fullscreen-mode {
       overflow: hidden;
@@ -240,48 +825,79 @@
         grid-template-rows: repeat(4, minmax(0, auto));
       }
       .quad {
-        padding: 14px 16px;
+        padding: 12px 14px;
       }
       .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
 
     @media (max-height: 920px) {
       :root {
-        --outer-pad: 12px;
-        --seam-pad: 20px;
-        --panel-gap: 10px;
+        --outer-pad: 10px;
+        --seam-pad: 16px;
+        --panel-gap: 8px;
       }
       .hero-block {
-        padding: 10px 12px 9px;
+        padding: 9px 11px 8px;
+      }
+      .hero-head {
+        margin-bottom: 6px;
+      }
+      .hero-kicker,
+      .hero-badge {
+        min-height: 22px;
+        padding: 0 8px;
+        font-size: 9px;
       }
       .title {
         font-size: clamp(22px, 2.05vw, 32px);
       }
       .meta {
         font-size: 12px;
-        gap: 4px;
+        gap: 3px;
       }
       .pill {
-        padding: 2px 7px;
+        padding: 2px 6px;
       }
       .cards {
-        gap: 10px;
+        gap: 8px;
       }
       .card {
-        padding: 8px 10px;
+        padding: 7px 9px;
+      }
+      .card::before {
+        width: 5px;
       }
       .k {
         font-size: 11px;
       }
+      .card-mark {
+        min-width: 32px;
+        min-height: 20px;
+        padding: 0 7px;
+        font-size: 9px;
+      }
       .v {
         font-size: clamp(18px, 1.8vw, 24px);
       }
+      .card-unit {
+        font-size: 11px;
+        padding-bottom: 3px;
+      }
       .panel {
-        padding: 6px 7px 7px;
+        padding: 5px 6px 6px;
       }
       .panel h3 {
         margin: 0 1px 3px;
         font-size: 12px;
+        min-height: 22px;
+        padding: 0 8px;
+      }
+      .panel-sub {
+        top: 6px;
+        right: 6px;
+        min-height: 20px;
+        padding: 0 7px;
+        font-size: 9px;
       }
       .chart {
         min-height: 120px;
@@ -297,7 +913,7 @@
     @media (max-height: 820px) {
       .cards {
         grid-template-columns: repeat(2, minmax(0, 1fr));
-        gap: 8px;
+        gap: 6px;
       }
       .title {
         font-size: clamp(20px, 1.8vw, 28px);
@@ -306,7 +922,7 @@
         margin-top: 2px;
       }
       .panel-grid {
-        gap: 8px;
+        gap: 6px;
       }
       .chart {
         min-height: 96px;
@@ -317,17 +933,18 @@
       html, body { height: auto; min-height: 100%; }
       body { overflow: auto; }
       .wrap {
-        padding: 10px 10px 16px;
-        gap: 10px;
+        padding: 8px 8px 12px;
+        gap: 8px;
         grid-template-columns: 1fr;
         grid-template-rows: none;
       }
-      .quad { padding: 12px 14px; }
-      .hero-block { padding: 12px 13px 10px; }
+      .quad { padding: 10px 12px; }
+      .hero-block { padding: 10px 11px 8px; }
+      .hero-head { margin-bottom: 6px; }
       .meta { font-size: 12px; gap: 4px; }
-      .pill { padding: 2px 8px; }
-      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
-      .card { padding: 8px 8px; }
+      .pill { padding: 2px 7px; }
+      .cards { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 6px; }
+      .card { padding: 7px 7px; }
       .k { font-size: 11px; }
       .v { font-size: clamp(18px, 5.4vw, 24px); }
       .panel-grid {
@@ -359,12 +976,16 @@
   <div class="wrap">
     <section class="quad quad-hero">
       <div class="hero-block">
+        <div class="hero-head">
+          <div class="hero-kicker">3D PRINT OPS</div>
+          <div class="hero-badge" id="refresh_badge" data-state="live">AUTO 05:00</div>
+        </div>
         <h1 class="title">3D打印运营展示板</h1>
         <div class="meta">
-          <span class="pill" id="gen"></span>
-          <span class="pill" id="src"></span>
-          <span class="pill" id="range"></span>
-          <span class="pill" id="latest"></span>
+          <span class="pill pill-meta-time" id="gen"></span>
+          <span class="pill pill-meta-source" id="src"></span>
+          <span class="pill pill-meta-range" id="range"></span>
+          <span class="pill pill-meta-latest" id="latest"></span>
         </div>
       </div>
       <section class="cards" id="cards"></section>
@@ -372,24 +993,24 @@
 
     <section class="quad quad-trend">
       <div class="panel-grid">
-        <div class="panel chart-panel"><h3>3D订单日趋势</h3><div class="chart" id="c_order_trend"></div></div>
-        <div class="panel chart-panel"><h3>3D订单操作日趋势</h3><div class="chart" id="c_action_trend"></div></div>
+        <div class="panel chart-panel panel-tone-order-trend"><h3>3D订单日趋势</h3><div class="panel-sub" id="sub_order_trend"></div><div class="chart" id="c_order_trend"></div></div>
+        <div class="panel chart-panel panel-tone-action-trend"><h3>3D订单操作日趋势</h3><div class="panel-sub" id="sub_action_trend"></div><div class="chart" id="c_action_trend"></div></div>
       </div>
     </section>
 
     <section class="quad quad-dist">
       <div class="panel-grid">
-        <div class="panel chart-panel"><h3>订单状态分布</h3><div class="chart" id="c_status"></div></div>
-        <div class="panel chart-panel"><h3>打印工艺分布</h3><div class="chart" id="c_print"></div></div>
-        <div class="panel chart-panel"><h3>订单用途分布</h3><div class="chart" id="c_purpose"></div></div>
-        <div class="panel chart-panel"><h3>学院分布</h3><div class="chart" id="c_department"></div></div>
+        <div class="panel chart-panel panel-tone-status"><h3>订单状态分布</h3><div class="panel-sub" id="sub_status"></div><div class="chart" id="c_status"></div></div>
+        <div class="panel chart-panel panel-tone-print"><h3>打印工艺分布</h3><div class="panel-sub" id="sub_print"></div><div class="chart" id="c_print"></div></div>
+        <div class="panel chart-panel panel-tone-purpose"><h3>订单用途分布</h3><div class="panel-sub" id="sub_purpose"></div><div class="chart" id="c_purpose"></div></div>
+        <div class="panel chart-panel panel-tone-department"><h3>学院分布</h3><div class="panel-sub" id="sub_department"></div><div class="chart" id="c_department"></div></div>
       </div>
     </section>
 
     <section class="quad quad-tables">
       <div class="panel-grid tables-grid">
-        <div class="panel"><h3>最近3D订单</h3><div class="table-wrap" id="t_orders"></div></div>
-        <div class="panel"><h3>最近3D助管操作</h3><div class="table-wrap" id="t_actions"></div></div>
+        <div class="panel panel-tone-orders"><h3>最近3D订单</h3><div class="panel-sub" id="sub_orders"></div><div class="table-wrap" id="t_orders"></div></div>
+        <div class="panel panel-tone-actions"><h3>最近3D助管操作</h3><div class="panel-sub" id="sub_actions"></div><div class="table-wrap" id="t_actions"></div></div>
       </div>
     </section>
   </div>
@@ -399,7 +1020,17 @@
     const IS_FILE_PROTOCOL = window.location.protocol === "file:";
     const REFRESH_MS = 5 * 60 * 1000; // Change here if you want a longer polling interval.
     const chartMap = {};
+    const chartSpotlightMeta = {};
     let lastVersion = "";
+    let currentDashboardData = null;
+    let refreshTickTimer = 0;
+    let refreshResumeTimer = 0;
+    let refreshNextAt = 0;
+    let spotlightTimer = 0;
+    let spotlightIndex = -1;
+    let chartSpotlightTimer = 0;
+    let chartSpotlightCursor = -1;
+    let chartSpotlightCurrent = null;
 
     function getChart(id) {
       if (!chartMap[id]) {
@@ -481,6 +1112,190 @@
       return Number.isFinite(n) ? n : 0;
     }
 
+    function clampNumber(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function formatRefreshCountdown(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function getRefreshBadge() {
+      return document.getElementById("refresh_badge");
+    }
+
+    function setRefreshBadge(text, state = "live") {
+      const badge = getRefreshBadge();
+      if (!badge) {
+        return;
+      }
+      badge.textContent = text;
+      badge.dataset.state = state;
+    }
+
+    function stopRefreshTimers() {
+      if (refreshTickTimer) {
+        window.clearInterval(refreshTickTimer);
+        refreshTickTimer = 0;
+      }
+      if (refreshResumeTimer) {
+        window.clearTimeout(refreshResumeTimer);
+        refreshResumeTimer = 0;
+      }
+    }
+
+    function renderRefreshCountdown() {
+      if (!refreshNextAt) {
+        return;
+      }
+      setRefreshBadge(`AUTO ${formatRefreshCountdown(refreshNextAt - Date.now())}`, "live");
+    }
+
+    function startRefreshCountdown() {
+      if (IS_FILE_PROTOCOL) {
+        stopRefreshTimers();
+        setRefreshBadge("STATIC", "static");
+        return;
+      }
+      stopRefreshTimers();
+      refreshNextAt = Date.now() + REFRESH_MS;
+      renderRefreshCountdown();
+      refreshTickTimer = window.setInterval(() => {
+        renderRefreshCountdown();
+      }, 1000);
+    }
+
+    function flashRefreshBadge(text, state = "success", holdMs = 1200) {
+      stopRefreshTimers();
+      setRefreshBadge(text, state);
+      if (IS_FILE_PROTOCOL) {
+        return;
+      }
+      refreshResumeTimer = window.setTimeout(() => {
+        startRefreshCountdown();
+      }, holdMs);
+    }
+
+    function getSpotlightTargets() {
+      return Array.from(document.querySelectorAll(".hero-block, .cards .card, .panel-grid .panel"));
+    }
+
+    function clearSpotlightState() {
+      getSpotlightTargets().forEach((el) => el.classList.remove("spotlight-target", "spotlight-active"));
+    }
+
+    function applySpotlightState(index) {
+      const targets = getSpotlightTargets();
+      if (!targets.length) {
+        return;
+      }
+      targets.forEach((el, idx) => {
+        el.classList.add("spotlight-target");
+        el.classList.toggle("spotlight-active", idx === index);
+      });
+    }
+
+    function startSpotlightCycle() {
+      const targets = getSpotlightTargets();
+      if (!targets.length) {
+        return;
+      }
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        clearSpotlightState();
+        return;
+      }
+      if (spotlightTimer) {
+        window.clearInterval(spotlightTimer);
+      }
+      spotlightIndex = 0;
+      applySpotlightState(spotlightIndex);
+      spotlightTimer = window.setInterval(() => {
+        const nextTargets = getSpotlightTargets();
+        if (!nextTargets.length) {
+          return;
+        }
+        spotlightIndex = (spotlightIndex + 1) % nextTargets.length;
+        applySpotlightState(spotlightIndex);
+      }, 4200);
+    }
+
+    function registerChartSpotlight(id, type, count) {
+      chartSpotlightMeta[id] = {
+        type,
+        count: Math.max(0, Number(count || 0)),
+        nextIndex: 0,
+      };
+    }
+
+    function clearChartSpotlightCurrent() {
+      if (!chartSpotlightCurrent) {
+        return;
+      }
+      const chart = chartMap[chartSpotlightCurrent.id];
+      if (chart) {
+        try {
+          chart.dispatchAction({type: "downplay", seriesIndex: 0, dataIndex: chartSpotlightCurrent.dataIndex});
+          chart.dispatchAction({type: "hideTip"});
+        } catch (e) {
+          // Ignore transient chart spotlight cleanup failures.
+        }
+      }
+      chartSpotlightCurrent = null;
+    }
+
+    function stepChartSpotlight() {
+      const entries = Object.entries(chartSpotlightMeta)
+        .filter(([, meta]) => meta && meta.count > 0)
+        .map(([id, meta]) => ({id, meta}))
+        .filter(({id}) => !!chartMap[id]);
+      if (!entries.length) {
+        return;
+      }
+
+      clearChartSpotlightCurrent();
+      chartSpotlightCursor = (chartSpotlightCursor + 1) % entries.length;
+      const {id, meta} = entries[chartSpotlightCursor];
+      const chart = chartMap[id];
+      if (!chart) {
+        return;
+      }
+
+      const dataIndex = meta.nextIndex % meta.count;
+      meta.nextIndex = (dataIndex + 1) % meta.count;
+      chartSpotlightCurrent = {id, dataIndex};
+
+      try {
+        chart.dispatchAction({type: "highlight", seriesIndex: 0, dataIndex});
+        chart.dispatchAction({type: "showTip", seriesIndex: 0, dataIndex});
+      } catch (e) {
+        // Ignore chart spotlight dispatch failures.
+      }
+    }
+
+    function startChartSpotlightCycle() {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        clearChartSpotlightCurrent();
+        if (chartSpotlightTimer) {
+          window.clearInterval(chartSpotlightTimer);
+          chartSpotlightTimer = 0;
+        }
+        return;
+      }
+      if (chartSpotlightTimer) {
+        window.clearInterval(chartSpotlightTimer);
+      }
+      chartSpotlightCursor = -1;
+      window.setTimeout(() => {
+        stepChartSpotlight();
+      }, 600);
+      chartSpotlightTimer = window.setInterval(() => {
+        stepChartSpotlight();
+      }, 3200);
+    }
+
     function isFullscreenLike() {
       if (document.fullscreenElement) {
         return true;
@@ -559,10 +1374,49 @@
       }
     }
 
-    function lineChart(id, list, color) {
+    function getLineTheme(id) {
+      if (id === "c_order_trend") {
+        return {
+          stroke: "#ff6a3d",
+          point: "#ff6a3d",
+          areaStart: "rgba(255,106,61,.24)",
+          areaEnd: "rgba(255,106,61,.02)",
+        };
+      }
+      return {
+        stroke: "#1f8ed8",
+        point: "#1f8ed8",
+        areaStart: "rgba(31,142,216,.22)",
+        areaEnd: "rgba(31,142,216,.02)",
+      };
+    }
+
+    function getBarTheme(id) {
+      if (id === "c_purpose") {
+        return {
+          palette: ["#ff8a54", "#ffb473", "#ffd19c", "#ffe4bf"],
+          labelColor: "#8c4e35",
+        };
+      }
+      return {
+        palette: ["#2d80c2", "#4b95d3", "#67a8df", "#86bae8", "#a4cbef", "#6faddd"],
+        labelColor: "#285b83",
+      };
+    }
+
+    function getPiePalette(id) {
+      if (id === "c_status") {
+        return ["#3f9142", "#1f8ed8", "#ff8a54", "#ffd19c", "#7fb4d9", "#aab9c5"];
+      }
+      return ["#54687b", "#2d80c2", "#ff8a54", "#3f9142", "#9fc3df"];
+    }
+
+    function lineChart(id, list) {
       const chart = getChart(id);
       const x = (list || []).map(i => (i.date || "").replace(/^\d{4}-/, ""));
       const y = (list || []).map(i => i.count);
+      const theme = getLineTheme(id);
+      registerChartSpotlight(id, "line", y.length);
       chart.setOption({
         animation: false,
         grid: {left: 38, right: 8, top: 22, bottom: 26, containLabel: true},
@@ -581,16 +1435,23 @@
           data: y,
           smooth: true,
           symbolSize: 6,
-          areaStyle: {opacity: .10},
-          lineStyle: {width: 2.5, color},
-          itemStyle: {color},
+          areaStyle: {
+            color: echarts.graphic && echarts.graphic.LinearGradient
+              ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  {offset: 0, color: theme.areaStart},
+                  {offset: 1, color: theme.areaEnd},
+                ])
+              : theme.areaStart
+          },
+          lineStyle: {width: 2.5, color: theme.stroke},
+          itemStyle: {color: theme.point, borderColor: "#fff", borderWidth: 1.5},
           label: {show: true, position: "top", color: "#3b4e61", fontSize: 10}
         }]
       });
       return elevateChartLayer(chart);
     }
 
-    function barChart(id, items, color) {
+    function barChart(id, items) {
       const chart = getChart(id);
       const names = (items || []).map(i => i.name);
       const values = (items || []).map(i => i.count);
@@ -599,6 +1460,8 @@
       const categoryWidth = isPurposeChart ? 98 : 82;
       const categoryLineHeight = isPurposeChart ? 13.2 : 11;
       const valueFontSize = isPurposeChart ? 12 : 10;
+      const theme = getBarTheme(id);
+      registerChartSpotlight(id, "bar", values.length);
       chart.setOption({
         animation: false,
         grid: {left: 86, right: 18, top: 22, bottom: 24, containLabel: false},
@@ -631,8 +1494,11 @@
         series: [{
           type: "bar",
           data: values,
-          itemStyle: {color, borderRadius: [0, 7, 7, 0]},
-          label: {show: true, position: "right", color: "#32475a", fontSize: valueFontSize}
+          itemStyle: {
+            color: (params) => theme.palette[params.dataIndex % theme.palette.length],
+            borderRadius: [0, 7, 7, 0]
+          },
+          label: {show: true, position: "right", color: theme.labelColor, fontSize: valueFontSize}
         }]
       });
       return elevateChartLayer(chart);
@@ -645,6 +1511,8 @@
       const labelFontSize = isStatusChart ? 10.8 : 9;
       const labelWidth = isStatusChart ? 134 : 112;
       const labelLineHeight = isStatusChart ? 14.4 : 12;
+      const palette = getPiePalette(id);
+      registerChartSpotlight(id, "pie", (items || []).length);
       chart.setOption({
         animation: false,
         tooltip: {
@@ -658,10 +1526,15 @@
         legend: {bottom: 0, textStyle: {color: "#5f7084", fontSize: legendFontSize}},
         series: [{
           type: "pie",
+          color: palette,
           radius: ["28%", "58%"],
           center: ["46%", "40%"],
           avoidLabelOverlap: true,
           data: (items || []).map(i => ({name: i.name, value: i.count})),
+          itemStyle: {
+            borderColor: "rgba(255,255,255,.92)",
+            borderWidth: 2
+          },
           label: {
             show: true,
             formatter: "{b}: {c}",
@@ -696,6 +1569,210 @@
       return raw;
     }
 
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function getBadgeVariant(column, value) {
+      const text = String(value || "").trim();
+      if (!text) {
+        return "";
+      }
+      if (column === "状态") {
+        if (text.includes("待审核")) return "badge-status-waiting";
+        if (text.includes("打印中")) return "badge-status-printing";
+        if (text.includes("待取件")) return "badge-status-pickup";
+        if (text.includes("已完成")) return "badge-status-complete";
+        if (text.includes("已拒绝")) return "badge-status-refused";
+        if (text.includes("已取消")) return "badge-status-canceled";
+      }
+      if (column === "用途") {
+        if (text.includes("课题") || text.includes("项目")) return "badge-purpose-project";
+        if (text.includes("课程")) return "badge-purpose-course";
+        if (text.includes("竞赛")) return "badge-purpose-contest";
+      }
+      if (column === "工艺") {
+        if (text.includes("FDM/FFF") || text.includes("FFF")) return "badge-tech-fff";
+        if (text.includes("FDM")) return "badge-tech-fdm";
+        if (text.includes("SLA")) return "badge-tech-sla";
+        if (text.includes("SLS")) return "badge-tech-sls";
+      }
+      if (column === "操作详情") {
+        if (text.includes("审核通过")) return "badge-action-approve";
+        if (text.includes("打印完成")) return "badge-action-done";
+        if (text.includes("取件完成")) return "badge-action-complete";
+        if (text.includes("拒绝")) return "badge-action-refuse";
+        if (text.includes("异常")) return "badge-action-exception";
+      }
+      if (column === "操作人") {
+        return "badge-person";
+      }
+      return "";
+    }
+
+    function renderTableCell(column, raw) {
+      const text = /时间|日期/.test(column) ? formatTimestampText(raw) : String(raw ?? "");
+      const safeText = escapeHtml(text);
+      if (/时间|日期/.test(column)) {
+        return `<span class="table-time">${safeText}</span>`;
+      }
+      if (column === "订单号") {
+        return `<span class="table-code">${safeText}</span>`;
+      }
+      const badgeVariant = getBadgeVariant(column, text);
+      if (badgeVariant) {
+        return `<span class="badge ${badgeVariant}">${safeText}</span>`;
+      }
+      return safeText;
+    }
+
+    function shortenText(value, max = 12) {
+      const text = String(value || "");
+      if (text.length <= max) {
+        return text;
+      }
+      return text.slice(0, Math.max(max - 1, 1)) + "…";
+    }
+
+    function setTextById(id, text) {
+      const el = document.getElementById(id);
+      if (el) {
+        el.textContent = text;
+      }
+    }
+
+    function getLatestStatText(rows, unit) {
+      const list = Array.isArray(rows) ? rows : [];
+      const last = list[list.length - 1];
+      if (!last) {
+        return "暂无更新";
+      }
+      const dateText = String(last.date || "").replace(/^\d{4}-/, "");
+      const current = Number(last.count || 0);
+      const prev = list.length > 1 ? Number(list[list.length - 2].count || 0) : null;
+      if (prev === null) {
+        return `最新 ${dateText} ${current}${unit}`;
+      }
+      const delta = current - prev;
+      if (delta === 0) {
+        return `${dateText} ${current}${unit} 持平`;
+      }
+      return `${dateText} ${current}${unit} ${delta > 0 ? "+" : ""}${delta}`;
+    }
+
+    function getTopStatText(rows, prefix = "最多", unit = "单", maxLabel = 10) {
+      const list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        return "暂无数据";
+      }
+      const normalized = list
+        .map((item) => ({name: String(item.name || ""), count: Number(item.count || 0)}));
+      const total = normalized.reduce((sum, item) => sum + item.count, 0);
+      const top = normalized
+        .sort((a, b) => b.count - a.count)[0];
+      const ratio = total > 0 ? Math.round((top.count / total) * 100) : 0;
+      return `${shortenText(top.name, maxLabel)} ${top.count}${unit} ${ratio}%`;
+    }
+
+    function getRowField(row, keys) {
+      const source = row && typeof row === "object" ? row : {};
+      for (const key of keys) {
+        const value = source[key];
+        if (value !== undefined && value !== null && String(value).trim()) {
+          return String(value).trim();
+        }
+      }
+      return "";
+    }
+
+    function getCompactTimeText(value) {
+      const text = formatTimestampText(value);
+      if (!text) {
+        return "";
+      }
+      return text.replace(/^(\d{4})-/, "").replace(/^(\d{2})-(\d{2}) /, "$1-$2 ");
+    }
+
+    function getRecentOrderSummaryText(rows) {
+      const list = Array.isArray(rows) ? rows : [];
+      const latest = list[0];
+      if (!latest) {
+        return "暂无订单";
+      }
+      const status = shortenText(getRowField(latest, ["状态"]), 6);
+      const time = getCompactTimeText(getRowField(latest, ["创建时间", "时间", "日期"]));
+      if (status && time) {
+        return `最新 ${status} ${time}`;
+      }
+      if (status) {
+        return `最新 ${status}`;
+      }
+      if (time) {
+        return `最新 ${time}`;
+      }
+      return `最近 ${list.length} 条`;
+    }
+
+    function getRecentActionSummaryText(rows) {
+      const list = Array.isArray(rows) ? rows : [];
+      const latest = list[0];
+      if (!latest) {
+        return "暂无操作";
+      }
+      const detail = shortenText(getRowField(latest, ["操作详情", "详情", "状态"]), 8);
+      const person = shortenText(getRowField(latest, ["操作人", "处理人", "人员"]), 5);
+      const time = getCompactTimeText(getRowField(latest, ["时间", "创建时间", "日期"]));
+      if (detail && person) {
+        return `${detail} ${person}`;
+      }
+      if (detail && time) {
+        return `${detail} ${time}`;
+      }
+      if (detail) {
+        return `最新 ${detail}`;
+      }
+      if (person) {
+        return `最新 ${person}`;
+      }
+      if (time) {
+        return `最新 ${time}`;
+      }
+      return `最近 ${list.length} 条`;
+    }
+
+    function getVisibleTableRowLimit(id, rows, fallbackRows, minRows = 4, maxRows = 12) {
+      const safeRows = Array.isArray(rows) ? rows : [];
+      if (!safeRows.length) {
+        return 0;
+      }
+      if (!isFullscreenLike()) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const root = document.getElementById(id);
+      if (!root) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const availableHeight = Math.max(root.clientHeight, Math.round(root.getBoundingClientRect().height));
+      if (availableHeight <= 0) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const docStyle = getComputedStyle(document.documentElement);
+      const tableFontSize = px(docStyle.getPropertyValue("--display-table-size")) || 12.6;
+      const cellPadY = px(docStyle.getPropertyValue("--display-cell-pad-y")) || 4;
+      const headerHeight = Math.max(tableFontSize * 2.2 + cellPadY * 2, 30);
+      const rowHeight = Math.max(tableFontSize * 1.75 + cellPadY * 2, 28);
+      const estimatedRows = Math.floor(Math.max(availableHeight - headerHeight, rowHeight) / rowHeight);
+      return clampNumber(estimatedRows, minRows, Math.min(maxRows, safeRows.length));
+    }
+
     function drawTable(id, rows, maxRows = 8) {
       const root = document.getElementById(id);
       if (!rows || !rows.length) {
@@ -706,14 +1783,29 @@
       const cols = Object.keys(data[0]);
       const thead = '<thead><tr>' + cols.map(c => `<th>${c}</th>`).join('') + '</tr></thead>';
       const tbody = '<tbody>' + data.map(r => '<tr>' + cols.map(c => {
-        const raw = r[c];
-        const text = /时间|日期/.test(c) ? formatTimestampText(raw) : (raw ?? "");
-        return `<td>${text}</td>`;
+        return `<td>${renderTableCell(c, r[c])}</td>`;
       }).join('') + '</tr>').join('') + '</tbody>';
       root.innerHTML = `<table>${thead}${tbody}</table>`;
     }
 
+    function refreshTables(tables) {
+      const sourceTables = tables || (currentDashboardData && currentDashboardData["表格"]) || {};
+      const recentOrders = sourceTables["最近3D订单"] || [];
+      const recentActions = sourceTables["最近3D助管操作"] || [];
+      drawTable("t_orders", recentOrders, getVisibleTableRowLimit("t_orders", recentOrders, 7, 4, 10));
+      drawTable("t_actions", recentActions, getVisibleTableRowLimit("t_actions", recentActions, 8, 4, 11));
+    }
+
+    function queueTableRefresh() {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          refreshTables();
+        });
+      });
+    }
+
     function renderDashboard(data) {
+      currentDashboardData = data;
       const meta = data["元信息"] || {};
       document.getElementById("gen").textContent = "生成时间：" + (meta["生成时间"] || "--");
       document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
@@ -725,8 +1817,18 @@
       const cards = data["指标卡"] || {};
       Object.entries(cards).forEach(([k,v]) => {
         const div = document.createElement("div");
-        div.className = "card";
-        div.innerHTML = `<div class="k">${k}</div><div class="v">${Number(v || 0).toLocaleString("zh-CN")}</div>`;
+        div.className = `card ${getCardToneClass(k)}`.trim();
+        div.innerHTML = `
+          <div class="card-head">
+            <div class="k">${k}</div>
+            <div class="card-mark">${getCardMark(k)}</div>
+          </div>
+          <div class="card-body">
+            <div class="v">${Number(v || 0).toLocaleString("zh-CN")}</div>
+            <div class="card-unit">单</div>
+          </div>
+          <div class="card-footer"></div>
+        `;
         cardsRoot.appendChild(div);
       });
 
@@ -736,15 +1838,49 @@
       const dist = data["分布"] || {};
       const tables = data["表格"] || {};
 
-      lineChart("c_order_trend", trends["3D订单日趋势"] || [], "#ff5a36");
-      lineChart("c_action_trend", trends["3D订单操作日趋势"] || [], "#1f8ed8");
+      setTextById("sub_order_trend", getLatestStatText(trends["3D订单日趋势"] || [], "单"));
+      setTextById("sub_action_trend", getLatestStatText(trends["3D订单操作日趋势"] || [], "次"));
+      setTextById("sub_status", getTopStatText(dist["订单状态"] || [], "最多", "单", 8));
+      setTextById("sub_print", getTopStatText(dist["打印工艺"] || [], "最多", "单", 10));
+      setTextById("sub_purpose", getTopStatText(dist["订单用途"] || [], "最多", "单", 8));
+      setTextById("sub_department", getTopStatText(dist["学院分布"] || [], "最多", "单", 10));
+      setTextById("sub_orders", getRecentOrderSummaryText(tables["最近3D订单"] || []));
+      setTextById("sub_actions", getRecentActionSummaryText(tables["最近3D助管操作"] || []));
+
+      lineChart("c_order_trend", trends["3D订单日趋势"] || []);
+      lineChart("c_action_trend", trends["3D订单操作日趋势"] || []);
       pieChart("c_status", dist["订单状态"] || []);
       pieChart("c_print", dist["打印工艺"] || []);
-      barChart("c_purpose", dist["订单用途"] || [], "#3f9142");
-      barChart("c_department", summarizeDepartments(dist["学院分布"] || [], 5), "#2d80c2");
+      barChart("c_purpose", dist["订单用途"] || []);
+      barChart("c_department", summarizeDepartments(dist["学院分布"] || [], 5));
 
       drawTable("t_orders", tables["最近3D订单"] || [], 7);
       drawTable("t_actions", tables["最近3D助管操作"] || [], 8);
+      refreshTables(tables);
+      startSpotlightCycle();
+      startChartSpotlightCycle();
+    }
+
+    function getCardToneClass(label) {
+      const text = String(label || "");
+      if (text.includes("总量")) return "card-tone-total";
+      if (text.includes("本月")) return "card-tone-month";
+      if (text.includes("今日")) return "card-tone-today";
+      if (text.includes("待审核")) return "card-tone-waiting";
+      if (text.includes("打印中")) return "card-tone-printing";
+      if (text.includes("待取件")) return "card-tone-pickup";
+      return "";
+    }
+
+    function getCardMark(label) {
+      const text = String(label || "");
+      if (text.includes("总量")) return "TOTAL";
+      if (text.includes("本月")) return "MONTH";
+      if (text.includes("今日")) return "TODAY";
+      if (text.includes("待审核")) return "CHECK";
+      if (text.includes("打印中")) return "PRINT";
+      if (text.includes("待取件")) return "PICK";
+      return "DATA";
     }
 
     function calcVersion(data) {
@@ -755,6 +1891,9 @@
 
     async function loadAndRender() {
       try {
+        if (!IS_FILE_PROTOCOL) {
+          setRefreshBadge("SYNC", "loading");
+        }
         const resp = await fetch(`./data.json?_=${Date.now()}`, { cache: "no-store" });
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}`);
@@ -762,12 +1901,17 @@
         const data = await resp.json();
         const version = calcVersion(data);
         if (version === lastVersion) {
+          startRefreshCountdown();
           return;
         }
         lastVersion = version;
         renderDashboard(data);
+        flashRefreshBadge("OK", "success", 1100);
       } catch (err) {
         console.error("load dashboard failed", err);
+        if (!IS_FILE_PROTOCOL) {
+          flashRefreshBadge("RETRY", "error", 1400);
+        }
       }
     }
 
@@ -776,9 +1920,15 @@
       renderDashboard(EMBEDDED_DATA);
     }
 
+    document.body.classList.add("motion-ready");
+    startRefreshCountdown();
+
     setTimeout(() => {
       applyViewportMode();
       Object.values(chartMap).forEach(c => c && c.resize());
+      queueTableRefresh();
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     }, 120);
 
     if (!IS_FILE_PROTOCOL) {
@@ -789,10 +1939,20 @@
     window.addEventListener("resize", () => {
       applyViewportMode();
       Object.values(chartMap).forEach(c => c && c.resize());
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     });
     document.addEventListener("fullscreenchange", () => {
       applyViewportMode();
       Object.values(chartMap).forEach(c => c && c.resize());
+      startSpotlightCycle();
+      startChartSpotlightCycle();
+    });
+    window.addEventListener("resize", () => {
+      queueTableRefresh();
+    });
+    document.addEventListener("fullscreenchange", () => {
+      queueTableRefresh();
     });
   </script>
 </body>

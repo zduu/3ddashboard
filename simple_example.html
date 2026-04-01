@@ -20,12 +20,15 @@
       --accent-2: #1e84d4;
       --accent-3: #2d78bf;
       --shadow: 0 12px 28px rgba(10,31,58,.10);
-      --outer-pad: 18px;
-      --seam-pad: 26px;
+      --outer-pad: 14px;
+      --seam-pad: 18px;
       --quad-gap: 0px;
-      --panel-pad: 10px;
+      --panel-pad: 8px;
       --panel-radius: 14px;
       --stage-scale: 1;
+      --display-table-size: 21px;
+      --display-cell-pad-y: 10px;
+      --display-cell-pad-x: 12px;
     }
     * { box-sizing: border-box; }
     html, body { width: 100%; min-height: 100%; }
@@ -58,6 +61,12 @@
     .quad-c { padding: var(--seam-pad) var(--seam-pad) var(--outer-pad) var(--outer-pad); }
     .quad-d { padding: var(--seam-pad) var(--outer-pad) var(--outer-pad) var(--seam-pad); }
     .panel {
+      --panel-accent-a: #1e84d4;
+      --panel-accent-b: #ff6a3d;
+      --panel-glow: rgba(30,132,212,.14);
+      --panel-title-bg: rgba(255,255,255,.78);
+      --panel-title-fg: #173149;
+      --panel-sub-bg: rgba(255,255,255,.56);
       min-height: 0;
       height: 100%;
       display: grid;
@@ -68,13 +77,36 @@
       border-radius: var(--panel-radius);
       box-shadow: var(--shadow);
       backdrop-filter: blur(8px);
+      position: relative;
+      overflow: hidden;
+    }
+    .panel::before {
+      content: "";
+      position: absolute;
+      left: 0;
+      right: 0;
+      top: 0;
+      height: 4px;
+      background: linear-gradient(90deg, var(--panel-accent-a), var(--panel-accent-b));
+      pointer-events: none;
+    }
+    .panel::after {
+      content: "";
+      position: absolute;
+      right: -38px;
+      top: -30px;
+      width: 138px;
+      height: 138px;
+      border-radius: 50%;
+      background: radial-gradient(circle, var(--panel-glow) 0%, rgba(255,255,255,0) 72%);
+      pointer-events: none;
     }
     .panel-head {
       display: flex;
       align-items: flex-start;
       justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 6px;
+      gap: 10px;
+      margin-bottom: 4px;
     }
     .title {
       margin: 0;
@@ -82,17 +114,26 @@
       line-height: 1.05;
       letter-spacing: -0.02em;
       font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      display: inline-flex;
+      align-items: center;
+      min-height: 34px;
+      padding: 0 11px;
+      border-radius: 999px;
+      color: var(--panel-title-fg);
+      background: var(--panel-title-bg);
+      border: 1px solid color-mix(in srgb, var(--panel-accent-a) 18%, rgba(16,39,60,.10));
+      box-shadow: 0 8px 18px rgba(10,31,58,.08);
     }
     .meta {
       display: flex;
       flex-wrap: wrap;
-      gap: 6px;
-      margin: 0 0 8px;
+      gap: 5px;
+      margin: 0 0 6px;
       color: var(--muted);
       font-size: 12px;
     }
     .pill {
-      padding: 2px 9px;
+      padding: 2px 8px;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: rgba(255,255,255,.7);
@@ -108,6 +149,49 @@
       font-size: 12px;
       text-align: right;
       white-space: nowrap;
+      min-height: 30px;
+      display: inline-flex;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 0 9px;
+      border-radius: 999px;
+      background: var(--panel-sub-bg);
+      border: 1px solid color-mix(in srgb, var(--panel-accent-a) 15%, rgba(16,39,60,.08));
+      max-width: 52%;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    .panel-tone-trend {
+      --panel-accent-a: #ff6a3d;
+      --panel-accent-b: #ffbc84;
+      --panel-glow: rgba(255,106,61,.16);
+      --panel-title-bg: rgba(255,246,240,.92);
+      --panel-title-fg: #964229;
+      --panel-sub-bg: rgba(255,244,237,.76);
+    }
+    .panel-tone-status {
+      --panel-accent-a: #1e84d4;
+      --panel-accent-b: #8fd6ff;
+      --panel-glow: rgba(30,132,212,.16);
+      --panel-title-bg: rgba(239,249,255,.92);
+      --panel-title-fg: #1f5f8e;
+      --panel-sub-bg: rgba(237,248,255,.74);
+    }
+    .panel-tone-department {
+      --panel-accent-a: #2d78bf;
+      --panel-accent-b: #9fd2ff;
+      --panel-glow: rgba(45,120,191,.16);
+      --panel-title-bg: rgba(241,248,255,.92);
+      --panel-title-fg: #225a88;
+      --panel-sub-bg: rgba(238,247,255,.74);
+    }
+    .panel-tone-orders {
+      --panel-accent-a: #3f9142;
+      --panel-accent-b: #a4dba4;
+      --panel-glow: rgba(63,145,66,.16);
+      --panel-title-bg: rgba(243,251,243,.92);
+      --panel-title-fg: #2f7131;
+      --panel-sub-bg: rgba(241,251,241,.74);
     }
     .chart {
       min-height: 320px;
@@ -128,16 +212,31 @@
       min-height: 0;
       height: 100%;
       overflow: auto;
+      scrollbar-gutter: stable both-edges;
     }
     table {
       width: 100%;
       border-collapse: collapse;
       table-layout: fixed;
-      font-size: 21px;
+      font-size: var(--display-table-size);
+    }
+    thead th {
+      position: sticky;
+      top: 0;
+      z-index: 2;
+      background: rgba(255,255,255,.94);
+      backdrop-filter: blur(6px);
+      box-shadow: inset 0 -1px 0 rgba(16,39,60,.08);
+    }
+    tbody tr:nth-child(even) td {
+      background: rgba(255,255,255,.26);
+    }
+    tbody tr:hover td {
+      background: rgba(30,132,212,.08);
     }
     th, td {
       text-align: left;
-      padding: 10px 12px;
+      padding: var(--display-cell-pad-y) var(--display-cell-pad-x);
       border-bottom: 1px dashed var(--line);
       vertical-align: top;
       overflow-wrap: anywhere;
@@ -146,6 +245,85 @@
     th {
       color: var(--muted);
       font-weight: 500;
+    }
+    .table-code {
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      font-weight: 700;
+      letter-spacing: .03em;
+      color: #173149;
+      white-space: nowrap;
+    }
+    .table-time {
+      font-family: "Space Grotesk", "Noto Sans SC", sans-serif;
+      color: #586c82;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+    .badge {
+      display: inline-flex;
+      align-items: center;
+      max-width: 100%;
+      padding: .18em .62em;
+      border-radius: 999px;
+      border: 1px solid transparent;
+      font-weight: 600;
+      line-height: 1.25;
+      white-space: normal;
+      background: rgba(95,114,134,.10);
+      color: #395065;
+    }
+    .badge-status-waiting {
+      background: rgba(255,106,61,.14);
+      color: #c45334;
+      border-color: rgba(255,106,61,.22);
+    }
+    .badge-status-printing {
+      background: rgba(30,132,212,.16);
+      color: #1c689d;
+      border-color: rgba(30,132,212,.24);
+    }
+    .badge-status-pickup {
+      background: rgba(45,120,191,.14);
+      color: #245c90;
+      border-color: rgba(45,120,191,.22);
+    }
+    .badge-status-complete {
+      background: rgba(56,80,101,.10);
+      color: #385065;
+      border-color: rgba(56,80,101,.18);
+    }
+    .badge-status-refused,
+    .badge-status-canceled {
+      background: rgba(110,126,143,.14);
+      color: #5d6d7e;
+      border-color: rgba(110,126,143,.20);
+    }
+    .badge-purpose-project {
+      background: rgba(30,132,212,.12);
+      color: #1e6698;
+      border-color: rgba(30,132,212,.20);
+    }
+    .badge-purpose-course {
+      background: rgba(63,145,66,.12);
+      color: #2d7b30;
+      border-color: rgba(63,145,66,.20);
+    }
+    .badge-purpose-contest {
+      background: rgba(255,106,61,.12);
+      color: #c45334;
+      border-color: rgba(255,106,61,.22);
+    }
+    .badge-tech-fdm,
+    .badge-tech-fff {
+      background: rgba(16,39,60,.08);
+      color: #29425a;
+      border-color: rgba(16,39,60,.12);
+    }
+    .badge-tech-sla,
+    .badge-tech-sls {
+      background: rgba(45,120,191,.12);
+      color: #245c90;
+      border-color: rgba(45,120,191,.20);
     }
     .empty {
       color: #7f8fa0;
@@ -156,6 +334,87 @@
       z-index: 2147483647 !important;
       pointer-events: none !important;
       font-size: calc(12px * var(--stage-scale, 1)) !important;
+    }
+    .pill-refresh[data-state="live"] {
+      color: #1f5f8e;
+      border-color: rgba(30,132,212,.16);
+      background: rgba(239,249,255,.9);
+    }
+    .pill-refresh[data-state="loading"] {
+      color: #9a5336;
+      border-color: rgba(255,106,61,.18);
+      background: rgba(255,246,240,.92);
+      animation: refreshPulse 1s ease-in-out infinite;
+    }
+    .pill-refresh[data-state="success"] {
+      color: #2f7131;
+      border-color: rgba(63,145,66,.16);
+      background: rgba(243,251,243,.92);
+    }
+    .pill-refresh[data-state="static"] {
+      color: #465a6c;
+      border-color: rgba(84,104,123,.14);
+      background: rgba(245,248,250,.9);
+    }
+    .pill-refresh[data-state="error"] {
+      color: #a3472f;
+      border-color: rgba(255,106,61,.16);
+      background: rgba(255,244,238,.92);
+    }
+
+    @keyframes dashboardFadeUp {
+      from {
+        opacity: 0;
+        transform: translateY(12px);
+      }
+      to {
+        opacity: 1;
+        transform: translateY(0);
+      }
+    }
+    @keyframes refreshPulse {
+      0%, 100% {
+        box-shadow: 0 4px 10px rgba(10,31,58,.05);
+        transform: scale(1);
+      }
+      50% {
+        box-shadow: 0 8px 18px rgba(255,106,61,.18);
+        transform: scale(1.02);
+      }
+    }
+    body.motion-ready .panel {
+      animation: dashboardFadeUp .5s ease-out both;
+    }
+    body.motion-ready .quad:nth-child(1) .panel { animation-delay: .04s; }
+    body.motion-ready .quad:nth-child(2) .panel { animation-delay: .08s; }
+    body.motion-ready .quad:nth-child(3) .panel { animation-delay: .12s; }
+    body.motion-ready .quad:nth-child(4) .panel { animation-delay: .16s; }
+    .spotlight-target {
+      transition:
+        transform .32s ease,
+        box-shadow .32s ease,
+        border-color .32s ease,
+        filter .32s ease;
+    }
+    .spotlight-active {
+      transform: translateY(-3px);
+      box-shadow: 0 20px 38px rgba(10,31,58,.18) !important;
+      border-color: rgba(30,132,212,.22) !important;
+      filter: saturate(1.04);
+    }
+    .panel.spotlight-active::before {
+      height: 5px;
+    }
+    @media (prefers-reduced-motion: reduce) {
+      body.motion-ready .panel,
+      .pill-refresh[data-state="loading"] {
+        animation: none !important;
+      }
+      .spotlight-target,
+      .spotlight-active {
+        transition: none !important;
+        transform: none !important;
+      }
     }
 
     body.fixed-scale-mode {
@@ -220,10 +479,18 @@
         min-height: 100vh;
       }
       .quad {
-        padding: 14px 16px;
+        padding: 12px 14px;
       }
       .panel {
         min-height: 420px;
+      }
+      .title {
+        min-height: 30px;
+        padding: 0 9px;
+      }
+      .sub {
+        min-height: 26px;
+        padding: 0 8px;
       }
       .chart {
         min-height: 280px;
@@ -234,7 +501,7 @@
 <body>
   <div class="wrap">
     <section class="quad quad-a">
-      <section class="panel">
+      <section class="panel panel-tone-trend">
         <div class="panel-head">
           <h2 class="title">3D订单日趋势</h2>
           <div class="sub" id="sub_trend"></div>
@@ -242,13 +509,14 @@
         <div class="meta">
           <span class="pill" id="gen"></span>
           <span class="pill" id="range"></span>
+          <span class="pill pill-refresh" id="refresh_status" data-state="live">AUTO 05:00</span>
         </div>
         <div class="chart" id="c_order_trend"></div>
       </section>
     </section>
 
     <section class="quad quad-b">
-      <section class="panel">
+      <section class="panel panel-tone-status">
         <div class="panel-head">
           <h2 class="title">订单状态分布</h2>
           <div class="sub" id="sub_status"></div>
@@ -262,10 +530,10 @@
     </section>
 
     <section class="quad quad-c">
-      <section class="panel">
+      <section class="panel panel-tone-department">
         <div class="panel-head">
           <h2 class="title">学院分布</h2>
-          <div class="sub">保留前5个独立学院</div>
+          <div class="sub" id="sub_department"></div>
         </div>
         <div class="meta">
           <span class="pill" id="total_orders"></span>
@@ -275,13 +543,13 @@
     </section>
 
     <section class="quad quad-d">
-      <section class="panel">
+      <section class="panel panel-tone-orders">
         <div class="panel-head">
           <h2 class="title">最近3D订单</h2>
           <div class="sub" id="sub_table"></div>
         </div>
         <div class="meta">
-          <span class="pill">按最近创建时间展示</span>
+          <span class="pill" id="table_meta"></span>
         </div>
         <div class="table-wrap" id="t_orders"></div>
       </section>
@@ -295,7 +563,17 @@
     const FIXED_STAGE_WIDTH = 2048;
     const FIXED_STAGE_HEIGHT = 1152;
     const chartMap = {};
+    const chartSpotlightMeta = {};
     let lastVersion = "";
+    let currentDashboardData = null;
+    let refreshTickTimer = 0;
+    let refreshResumeTimer = 0;
+    let refreshNextAt = 0;
+    let spotlightTimer = 0;
+    let spotlightIndex = -1;
+    let chartSpotlightTimer = 0;
+    let chartSpotlightCursor = -1;
+    let chartSpotlightCurrent = null;
 
     function getChart(id) {
       if (!chartMap[id]) {
@@ -377,6 +655,327 @@
         return `${match[1]} ${match[2]}`;
       }
       return raw;
+    }
+
+    function escapeHtml(value) {
+      return String(value ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/\"/g, "&quot;")
+        .replace(/'/g, "&#39;");
+    }
+
+    function getBadgeVariant(column, value) {
+      const text = String(value || "").trim();
+      if (!text) {
+        return "";
+      }
+      if (column === "状态") {
+        if (text.includes("待审核")) return "badge-status-waiting";
+        if (text.includes("打印中")) return "badge-status-printing";
+        if (text.includes("待取件")) return "badge-status-pickup";
+        if (text.includes("已完成")) return "badge-status-complete";
+        if (text.includes("已拒绝")) return "badge-status-refused";
+        if (text.includes("已取消")) return "badge-status-canceled";
+      }
+      if (column === "用途") {
+        if (text.includes("课题") || text.includes("项目")) return "badge-purpose-project";
+        if (text.includes("课程")) return "badge-purpose-course";
+        if (text.includes("竞赛")) return "badge-purpose-contest";
+      }
+      if (column === "工艺") {
+        if (text.includes("FDM/FFF") || text.includes("FFF")) return "badge-tech-fff";
+        if (text.includes("FDM")) return "badge-tech-fdm";
+        if (text.includes("SLA")) return "badge-tech-sla";
+        if (text.includes("SLS")) return "badge-tech-sls";
+      }
+      return "";
+    }
+
+    function renderTableCell(column, raw) {
+      const text = /时间|日期/.test(column) ? formatTimestampText(raw) : String(raw ?? "");
+      const safeText = escapeHtml(text);
+      if (/时间|日期/.test(column)) {
+        return `<span class="table-time">${safeText}</span>`;
+      }
+      if (column === "订单号") {
+        return `<span class="table-code">${safeText}</span>`;
+      }
+      const badgeVariant = getBadgeVariant(column, text);
+      if (badgeVariant) {
+        return `<span class="badge ${badgeVariant}">${safeText}</span>`;
+      }
+      return safeText;
+    }
+
+    function shortenText(value, max = 12) {
+      const text = String(value || "");
+      if (text.length <= max) {
+        return text;
+      }
+      return text.slice(0, Math.max(max - 1, 1)) + "…";
+    }
+
+    function getLatestStatText(rows, unit) {
+      const list = Array.isArray(rows) ? rows : [];
+      const last = list[list.length - 1];
+      if (!last) {
+        return "暂无更新";
+      }
+      const dateText = String(last.date || "").replace(/^\d{4}-/, "");
+      const current = Number(last.count || 0);
+      const prev = list.length > 1 ? Number(list[list.length - 2].count || 0) : null;
+      if (prev === null) {
+        return `最新 ${dateText} ${current}${unit}`;
+      }
+      const delta = current - prev;
+      if (delta === 0) {
+        return `${dateText} ${current}${unit} 持平`;
+      }
+      return `${dateText} ${current}${unit} ${delta > 0 ? "+" : ""}${delta}`;
+    }
+
+    function getTopStatText(rows, prefix = "最多", unit = "单", maxLabel = 10) {
+      const list = Array.isArray(rows) ? rows : [];
+      if (!list.length) {
+        return "暂无数据";
+      }
+      const normalized = list
+        .map((item) => ({name: String(item.name || ""), count: Number(item.count || 0)}));
+      const total = normalized.reduce((sum, item) => sum + item.count, 0);
+      const top = normalized
+        .sort((a, b) => b.count - a.count)[0];
+      const ratio = total > 0 ? Math.round((top.count / total) * 100) : 0;
+      return `${shortenText(top.name, maxLabel)} ${top.count}${unit} ${ratio}%`;
+    }
+
+    function getRowField(row, keys) {
+      const source = row && typeof row === "object" ? row : {};
+      for (const key of keys) {
+        const value = source[key];
+        if (value !== undefined && value !== null && String(value).trim()) {
+          return String(value).trim();
+        }
+      }
+      return "";
+    }
+
+    function getCompactTimeText(value) {
+      const text = formatTimestampText(value);
+      if (!text) {
+        return "";
+      }
+      return text.replace(/^(\d{4})-/, "").replace(/^(\d{2})-(\d{2}) /, "$1-$2 ");
+    }
+
+    function getRecentOrderSummaryText(rows) {
+      const list = Array.isArray(rows) ? rows : [];
+      const latest = list[0];
+      if (!latest) {
+        return "暂无订单";
+      }
+      const status = shortenText(getRowField(latest, ["状态"]), 6);
+      const time = getCompactTimeText(getRowField(latest, ["创建时间", "时间", "日期"]));
+      if (status && time) {
+        return `最新 ${status} ${time}`;
+      }
+      if (status) {
+        return `最新 ${status}`;
+      }
+      if (time) {
+        return `最新 ${time}`;
+      }
+      return `最近 ${list.length} 条`;
+    }
+
+    function px(value) {
+      const n = parseFloat(value || "0");
+      return Number.isFinite(n) ? n : 0;
+    }
+
+    function clampNumber(value, min, max) {
+      return Math.max(min, Math.min(max, value));
+    }
+
+    function formatRefreshCountdown(ms) {
+      const totalSeconds = Math.max(0, Math.ceil(ms / 1000));
+      const minutes = String(Math.floor(totalSeconds / 60)).padStart(2, "0");
+      const seconds = String(totalSeconds % 60).padStart(2, "0");
+      return `${minutes}:${seconds}`;
+    }
+
+    function getRefreshStatus() {
+      return document.getElementById("refresh_status");
+    }
+
+    function setRefreshStatus(text, state = "live") {
+      const el = getRefreshStatus();
+      if (!el) {
+        return;
+      }
+      el.textContent = text;
+      el.dataset.state = state;
+    }
+
+    function stopRefreshTimers() {
+      if (refreshTickTimer) {
+        window.clearInterval(refreshTickTimer);
+        refreshTickTimer = 0;
+      }
+      if (refreshResumeTimer) {
+        window.clearTimeout(refreshResumeTimer);
+        refreshResumeTimer = 0;
+      }
+    }
+
+    function renderRefreshCountdown() {
+      if (!refreshNextAt) {
+        return;
+      }
+      setRefreshStatus(`AUTO ${formatRefreshCountdown(refreshNextAt - Date.now())}`, "live");
+    }
+
+    function startRefreshCountdown() {
+      if (IS_FILE_PROTOCOL) {
+        stopRefreshTimers();
+        setRefreshStatus("STATIC", "static");
+        return;
+      }
+      stopRefreshTimers();
+      refreshNextAt = Date.now() + REFRESH_MS;
+      renderRefreshCountdown();
+      refreshTickTimer = window.setInterval(() => {
+        renderRefreshCountdown();
+      }, 1000);
+    }
+
+    function flashRefreshStatus(text, state = "success", holdMs = 1200) {
+      stopRefreshTimers();
+      setRefreshStatus(text, state);
+      if (IS_FILE_PROTOCOL) {
+        return;
+      }
+      refreshResumeTimer = window.setTimeout(() => {
+        startRefreshCountdown();
+      }, holdMs);
+    }
+
+    function getSpotlightTargets() {
+      return Array.from(document.querySelectorAll(".panel"));
+    }
+
+    function clearSpotlightState() {
+      getSpotlightTargets().forEach((el) => el.classList.remove("spotlight-target", "spotlight-active"));
+    }
+
+    function applySpotlightState(index) {
+      const targets = getSpotlightTargets();
+      if (!targets.length) {
+        return;
+      }
+      targets.forEach((el, idx) => {
+        el.classList.add("spotlight-target");
+        el.classList.toggle("spotlight-active", idx === index);
+      });
+    }
+
+    function startSpotlightCycle() {
+      const targets = getSpotlightTargets();
+      if (!targets.length) {
+        return;
+      }
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        clearSpotlightState();
+        return;
+      }
+      if (spotlightTimer) {
+        window.clearInterval(spotlightTimer);
+      }
+      spotlightIndex = 0;
+      applySpotlightState(spotlightIndex);
+      spotlightTimer = window.setInterval(() => {
+        const nextTargets = getSpotlightTargets();
+        if (!nextTargets.length) {
+          return;
+        }
+        spotlightIndex = (spotlightIndex + 1) % nextTargets.length;
+        applySpotlightState(spotlightIndex);
+      }, 4200);
+    }
+
+    function registerChartSpotlight(id, type, count) {
+      chartSpotlightMeta[id] = {
+        type,
+        count: Math.max(0, Number(count || 0)),
+        nextIndex: 0,
+      };
+    }
+
+    function clearChartSpotlightCurrent() {
+      if (!chartSpotlightCurrent) {
+        return;
+      }
+      const chart = chartMap[chartSpotlightCurrent.id];
+      if (chart) {
+        try {
+          chart.dispatchAction({type: "downplay", seriesIndex: 0, dataIndex: chartSpotlightCurrent.dataIndex});
+          chart.dispatchAction({type: "hideTip"});
+        } catch (e) {
+          // Ignore transient chart spotlight cleanup failures.
+        }
+      }
+      chartSpotlightCurrent = null;
+    }
+
+    function stepChartSpotlight() {
+      const entries = Object.entries(chartSpotlightMeta)
+        .filter(([, meta]) => meta && meta.count > 0)
+        .map(([id, meta]) => ({id, meta}))
+        .filter(({id}) => !!chartMap[id]);
+      if (!entries.length) {
+        return;
+      }
+
+      clearChartSpotlightCurrent();
+      chartSpotlightCursor = (chartSpotlightCursor + 1) % entries.length;
+      const {id, meta} = entries[chartSpotlightCursor];
+      const chart = chartMap[id];
+      if (!chart) {
+        return;
+      }
+
+      const dataIndex = meta.nextIndex % meta.count;
+      meta.nextIndex = (dataIndex + 1) % meta.count;
+      chartSpotlightCurrent = {id, dataIndex};
+
+      try {
+        chart.dispatchAction({type: "highlight", seriesIndex: 0, dataIndex});
+        chart.dispatchAction({type: "showTip", seriesIndex: 0, dataIndex});
+      } catch (e) {
+        // Ignore chart spotlight dispatch failures.
+      }
+    }
+
+    function startChartSpotlightCycle() {
+      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
+        clearChartSpotlightCurrent();
+        if (chartSpotlightTimer) {
+          window.clearInterval(chartSpotlightTimer);
+          chartSpotlightTimer = 0;
+        }
+        return;
+      }
+      if (chartSpotlightTimer) {
+        window.clearInterval(chartSpotlightTimer);
+      }
+      chartSpotlightCursor = -1;
+      window.setTimeout(() => {
+        stepChartSpotlight();
+      }, 600);
+      chartSpotlightTimer = window.setInterval(() => {
+        stepChartSpotlight();
+      }, 3200);
     }
 
     function isFullscreenLike() {
@@ -485,8 +1084,30 @@
       clearLayout();
     }
 
+    function getLineTheme() {
+      return {
+        stroke: "#ff6a3d",
+        point: "#ff6a3d",
+        areaStart: "rgba(255,106,61,.24)",
+        areaEnd: "rgba(255,106,61,.03)",
+      };
+    }
+
+    function getPiePalette() {
+      return ["#1e84d4", "#3f9142", "#ff8a54", "#ffd19c", "#7fb4d9", "#aab9c5"];
+    }
+
+    function getBarTheme() {
+      return {
+        palette: ["#2d78bf", "#4b92d0", "#67a7dd", "#86bbe8", "#a5ccf0", "#6aa4d5"],
+        labelColor: "#225a88",
+      };
+    }
+
     function lineChart(id, list) {
       const chart = getChart(id);
+      const theme = getLineTheme();
+      registerChartSpotlight(id, "line", (list || []).length);
       chart.setOption({
         animation: false,
         grid: {left: 48, right: 16, top: 28, bottom: 42, containLabel: true},
@@ -513,9 +1134,16 @@
           smooth: true,
           data: (list || []).map((item) => Number(item.count || 0)),
           symbolSize: 8,
-          areaStyle: {opacity: .14},
-          lineStyle: {width: 3, color: "#ff6a3d"},
-          itemStyle: {color: "#ff6a3d"},
+          areaStyle: {
+            color: echarts.graphic && echarts.graphic.LinearGradient
+              ? new echarts.graphic.LinearGradient(0, 0, 0, 1, [
+                  {offset: 0, color: theme.areaStart},
+                  {offset: 1, color: theme.areaEnd},
+                ])
+              : theme.areaStart
+          },
+          lineStyle: {width: 3, color: theme.stroke},
+          itemStyle: {color: theme.point, borderColor: "#fff", borderWidth: 2},
           label: {show: true, position: "top", color: "#385065", fontSize: 12}
         }]
       });
@@ -524,6 +1152,8 @@
 
     function pieChart(id, items) {
       const chart = getChart(id);
+      const palette = getPiePalette();
+      registerChartSpotlight(id, "pie", (items || []).length);
       chart.setOption({
         animation: false,
         tooltip: {
@@ -540,11 +1170,16 @@
         },
         series: [{
           type: "pie",
+          color: palette,
           radius: ["34%", "70%"],
           center: ["40%", "40%"],
           avoidLabelOverlap: true,
           labelLayout: {hideOverlap: false, moveOverlap: "shiftY"},
           data: (items || []).map((item) => ({name: item.name, value: item.count})),
+          itemStyle: {
+            borderColor: "rgba(255,255,255,.94)",
+            borderWidth: 3
+          },
           label: {
             show: true,
             formatter: "{b}: {c}",
@@ -562,6 +1197,8 @@
 
     function barChart(id, items) {
       const chart = getChart(id);
+      const theme = getBarTheme();
+      registerChartSpotlight(id, "bar", (items || []).length);
       chart.setOption({
         animation: false,
         grid: {left: 132, right: 32, top: 28, bottom: 32, containLabel: false},
@@ -594,8 +1231,11 @@
         series: [{
           type: "bar",
           data: (items || []).map((item) => item.count),
-          itemStyle: {color: "#2d78bf", borderRadius: [0, 8, 8, 0]},
-          label: {show: true, position: "right", color: "#385065", fontSize: 12}
+          itemStyle: {
+            color: (params) => theme.palette[params.dataIndex % theme.palette.length],
+            borderRadius: [0, 8, 8, 0]
+          },
+          label: {show: true, position: "right", color: theme.labelColor, fontSize: 12}
         }]
       });
       return elevateChartLayer(chart);
@@ -616,8 +1256,50 @@
       }));
       const cols = Object.keys(data[0]);
       const thead = "<thead><tr>" + cols.map((col) => `<th>${col}</th>`).join("") + "</tr></thead>";
-      const tbody = "<tbody>" + data.map((row) => "<tr>" + cols.map((col) => `<td>${row[col] ?? ""}</td>`).join("") + "</tr>").join("") + "</tbody>";
+      const tbody = "<tbody>" + data.map((row) => "<tr>" + cols.map((col) => `<td>${renderTableCell(col, row[col])}</td>`).join("") + "</tr>").join("") + "</tbody>";
       root.innerHTML = `<table>${thead}${tbody}</table>`;
+    }
+
+    function getVisibleTableRowLimit(id, rows, fallbackRows, minRows = 5, maxRows = 11) {
+      const safeRows = Array.isArray(rows) ? rows : [];
+      if (!safeRows.length) {
+        return 0;
+      }
+      if (!isFullscreenLike()) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const root = document.getElementById(id);
+      if (!root) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const availableHeight = Math.max(root.clientHeight, Math.round(root.getBoundingClientRect().height));
+      if (availableHeight <= 0) {
+        return Math.min(fallbackRows, safeRows.length);
+      }
+
+      const docStyle = getComputedStyle(document.documentElement);
+      const tableFontSize = px(docStyle.getPropertyValue("--display-table-size")) || 21;
+      const cellPadY = px(docStyle.getPropertyValue("--display-cell-pad-y")) || 10;
+      const headerHeight = Math.max(tableFontSize * 2.2 + cellPadY * 2, 48);
+      const rowHeight = Math.max(tableFontSize * 1.7 + cellPadY * 2, 44);
+      const estimatedRows = Math.floor(Math.max(availableHeight - headerHeight, rowHeight) / rowHeight);
+      return clampNumber(estimatedRows, minRows, Math.min(maxRows, safeRows.length));
+    }
+
+    function refreshRecentOrders(tables) {
+      const sourceTables = tables || (currentDashboardData && currentDashboardData["表格"]) || {};
+      const recentOrders = sourceTables["最近3D订单"] || [];
+      drawRecentOrders("t_orders", recentOrders, getVisibleTableRowLimit("t_orders", recentOrders, 9, 5, 11));
+    }
+
+    function queueTableRefresh() {
+      window.requestAnimationFrame(() => {
+        window.requestAnimationFrame(() => {
+          refreshRecentOrders();
+        });
+      });
     }
 
     function calcVersion(data) {
@@ -626,6 +1308,7 @@
     }
 
     function renderDashboard(data) {
+      currentDashboardData = data;
       const meta = data["元信息"] || {};
       const cards = data["指标卡"] || {};
       const trends = data["趋势"] || {};
@@ -636,22 +1319,30 @@
       document.getElementById("range").textContent = "统计区间：" + (meta["统计区间"] || "--");
       document.getElementById("src").textContent = "数据源：" + (meta["数据源类型"] || "未知");
       document.getElementById("latest").textContent = "最新统计日期：" + (meta["最新统计日期"] || "--");
-      document.getElementById("sub_trend").textContent = `总订单 ${Number(cards["统计区间3D订单总量"] || 0).toLocaleString("zh-CN")}`;
-      document.getElementById("sub_status").textContent = `待取件 ${Number(cards["待取件"] || 0).toLocaleString("zh-CN")}`;
+      document.getElementById("sub_trend").textContent = getLatestStatText(trends["3D订单日趋势"] || [], "单");
+      document.getElementById("sub_status").textContent = getTopStatText(dist["订单状态"] || [], "最多", "单", 8);
+      document.getElementById("sub_department").textContent = getTopStatText(dist["学院分布"] || [], "最多", "单", 10);
       document.getElementById("total_orders").textContent = `统计区间3D订单总量：${Number(cards["统计区间3D订单总量"] || 0).toLocaleString("zh-CN")}`;
-      document.getElementById("sub_table").textContent = `${(tables["最近3D订单"] || []).length} 条`;
+      document.getElementById("sub_table").textContent = getRecentOrderSummaryText(tables["最近3D订单"] || []);
+      document.getElementById("table_meta").textContent = `最近 ${(tables["最近3D订单"] || []).length} 条`;
 
       lineChart("c_order_trend", trends["3D订单日趋势"] || []);
       pieChart("c_status", dist["订单状态"] || []);
       barChart("c_department", summarizeDepartments(dist["学院分布"] || [], 5));
       drawRecentOrders("t_orders", tables["最近3D订单"] || [], 9);
+      refreshRecentOrders(tables);
 
       applyViewportMode();
       Object.values(chartMap).forEach((chart) => chart && chart.resize());
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     }
 
     async function loadAndRender() {
       try {
+        if (!IS_FILE_PROTOCOL) {
+          setRefreshStatus("SYNC", "loading");
+        }
         const resp = await fetch(`./data.json?_=${Date.now()}`, {cache: "no-store"});
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}`);
@@ -659,12 +1350,17 @@
         const data = await resp.json();
         const version = calcVersion(data);
         if (version === lastVersion) {
+          startRefreshCountdown();
           return;
         }
         lastVersion = version;
         renderDashboard(data);
+        flashRefreshStatus("OK", "success", 1100);
       } catch (err) {
         console.error("load simple dashboard failed", err);
+        if (!IS_FILE_PROTOCOL) {
+          flashRefreshStatus("RETRY", "error", 1400);
+        }
       }
     }
 
@@ -673,9 +1369,15 @@
       renderDashboard(EMBEDDED_DATA);
     }
 
+    document.body.classList.add("motion-ready");
+    startRefreshCountdown();
+
     setTimeout(() => {
       applyViewportMode();
       Object.values(chartMap).forEach((chart) => chart && chart.resize());
+      queueTableRefresh();
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     }, 120);
 
     if (!IS_FILE_PROTOCOL) {
@@ -686,10 +1388,16 @@
     window.addEventListener("resize", () => {
       applyViewportMode();
       Object.values(chartMap).forEach((chart) => chart && chart.resize());
+      queueTableRefresh();
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     });
     document.addEventListener("fullscreenchange", () => {
       applyViewportMode();
       Object.values(chartMap).forEach((chart) => chart && chart.resize());
+      queueTableRefresh();
+      startSpotlightCycle();
+      startChartSpotlightCycle();
     });
   </script>
 </body>
