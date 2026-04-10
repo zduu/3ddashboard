@@ -1,0 +1,28 @@
+[2026-04-10 14:10:54] [WEB] Serving C:\Users\taole\Desktop\dashboard_runner\dashboard at http://0.0.0.0:8000
+[2026-04-10 14:10:54] [TASK] Interval: every 30 minutes
+[INFO] Using browser channel: msedge
+[INFO] Detected filter buttons: 5
+[OK] Summary JSON saved: output\filters_20260410_141054\summary.json
+[OK] Summary CSV saved:  output\filters_20260410_141054\summary.csv
+[INFO] Fetching assist actions via request: https://make.sjtu.edu.cn/api/statistics/assist-action?process_type=thdprint&start_date=2026-04-10&end_date=2026-04-10
+[WARN] Assist-action capture failed: 'APIResponse' object has no attribute 'raise_for_status'
+[OK] Dashboard HTML saved: dashboard\index.html
+[OK] Dashboard data saved: dashboard\data.json
+[2026-04-10 14:11:32] [TASK] Missing order-stats capture detected, retrying once...
+[INFO] Using browser channel: msedge
+[2026-04-10 14:11:42] [WEB] "GET / HTTP/1.1" 200 -
+[2026-04-10 14:11:43] [WEB] "GET /data.json?_=1775801503284 HTTP/1.1" 200 -
+[2026-04-10 14:11:43] [WEB] "GET /favicon.ico HTTP/1.1" 204 -
+[INFO] Detected filter buttons: 5
+[OK] Summary JSON saved: output\filters_20260410_141132\summary.json
+[OK] Summary CSV saved:  output\filters_20260410_141132\summary.csv
+[INFO] Fetching assist actions via request: https://make.sjtu.edu.cn/api/statistics/assist-action?process_type=thdprint&start_date=2026-04-10&end_date=2026-04-10
+[WARN] Assist-action capture failed: 'APIResponse' object has no attribute 'raise_for_status'
+[OK] Dashboard HTML saved: dashboard\index.html
+[OK] Dashboard data saved: dashboard\data.json
+[2026-04-10 14:12:09] [TASK] Warning: order-stats capture still missing after retry.
+[2026-04-10 14:12:09] [TASK] SUCCESS, elapsed: 75.2s
+[2026-04-10 14:12:09] [TASK] Next run at: 2026-04-10 14:42:09
+[2026-04-10 14:12:24] [WEB] "GET / HTTP/1.1" 200 -
+[2026-04-10 14:12:24] [WEB] "GET /data.json?_=1775801544961 HTTP/1.1" 200 -
+[2026-04-10 14:12:25] [WEB] "GET /favicon.ico HTTP/1.1" 204 -

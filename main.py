@@ -211,10 +211,15 @@ def fetch_assist_actions(
 
     with sync_playwright() as p:
         request_context = p.request.new_context(storage_state=str(state_path))
-        print(f"[INFO] Fetching assist actions via request: {url}")
-        resp = request_context.get(url)
-        resp.raise_for_status()
-        data = resp.json()
+        try:
+            print(f"[INFO] Fetching assist actions via request: {url}")
+            resp = request_context.get(url)
+            status = int(getattr(resp, "status", 0) or 0)
+            if status >= 400:
+                raise RuntimeError(f"Assist API HTTP {status}: {resp.text()[:300]}")
+            data = resp.json()
+        finally:
+            request_context.dispose()
 
     with dest.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)

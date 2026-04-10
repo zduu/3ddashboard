@@ -189,7 +189,6 @@
       color: #9a5336;
       background: rgba(255,246,240,.9);
       border-color: rgba(255,138,84,.18);
-      animation: refreshPulse 1s ease-in-out infinite;
     }
     .hero-badge[data-state="success"] {
       color: #2e6f31;
@@ -1169,14 +1168,7 @@
     }
 
     function flashRefreshBadge(text, state = "success", holdMs = 1200) {
-      stopRefreshTimers();
-      setRefreshBadge(text, state);
-      if (IS_FILE_PROTOCOL) {
-        return;
-      }
-      refreshResumeTimer = window.setTimeout(() => {
-        startRefreshCountdown();
-      }, holdMs);
+      startRefreshCountdown();
     }
 
     function getSpotlightTargets() {
@@ -1199,27 +1191,11 @@
     }
 
     function startSpotlightCycle() {
-      const targets = getSpotlightTargets();
-      if (!targets.length) {
-        return;
-      }
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        clearSpotlightState();
-        return;
-      }
       if (spotlightTimer) {
         window.clearInterval(spotlightTimer);
+        spotlightTimer = 0;
       }
-      spotlightIndex = 0;
-      applySpotlightState(spotlightIndex);
-      spotlightTimer = window.setInterval(() => {
-        const nextTargets = getSpotlightTargets();
-        if (!nextTargets.length) {
-          return;
-        }
-        spotlightIndex = (spotlightIndex + 1) % nextTargets.length;
-        applySpotlightState(spotlightIndex);
-      }, 4200);
+      clearSpotlightState();
     }
 
     function registerChartSpotlight(id, type, count) {
@@ -1276,24 +1252,11 @@
     }
 
     function startChartSpotlightCycle() {
-      if (window.matchMedia && window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-        clearChartSpotlightCurrent();
-        if (chartSpotlightTimer) {
-          window.clearInterval(chartSpotlightTimer);
-          chartSpotlightTimer = 0;
-        }
-        return;
-      }
+      clearChartSpotlightCurrent();
       if (chartSpotlightTimer) {
         window.clearInterval(chartSpotlightTimer);
+        chartSpotlightTimer = 0;
       }
-      chartSpotlightCursor = -1;
-      window.setTimeout(() => {
-        stepChartSpotlight();
-      }, 600);
-      chartSpotlightTimer = window.setInterval(() => {
-        stepChartSpotlight();
-      }, 3200);
     }
 
     function isFullscreenLike() {
@@ -1891,9 +1854,6 @@
 
     async function loadAndRender() {
       try {
-        if (!IS_FILE_PROTOCOL) {
-          setRefreshBadge("SYNC", "loading");
-        }
         const resp = await fetch(`./data.json?_=${Date.now()}`, { cache: "no-store" });
         if (!resp.ok) {
           throw new Error(`HTTP ${resp.status}`);
@@ -1906,12 +1866,10 @@
         }
         lastVersion = version;
         renderDashboard(data);
-        flashRefreshBadge("OK", "success", 1100);
+        startRefreshCountdown();
       } catch (err) {
         console.error("load dashboard failed", err);
-        if (!IS_FILE_PROTOCOL) {
-          flashRefreshBadge("RETRY", "error", 1400);
-        }
+        startRefreshCountdown();
       }
     }
 
@@ -1920,7 +1878,6 @@
       renderDashboard(EMBEDDED_DATA);
     }
 
-    document.body.classList.add("motion-ready");
     startRefreshCountdown();
 
     setTimeout(() => {
