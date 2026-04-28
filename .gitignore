@@ -12,3 +12,6 @@ build/
 PY_PATH.txt
 .DS_Store
 dashboard.pid
+.claude/
+example
+auth/
