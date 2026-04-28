@@ -360,6 +360,33 @@
       border-color: rgba(255,106,61,.16);
       background: rgba(255,244,238,.92);
     }
+    .service-banner {
+      margin-top: 8px;
+      min-height: 24px;
+      padding: 7px 10px;
+      border-radius: 10px;
+      font-size: 12px;
+      line-height: 1.5;
+      color: #385065;
+      background: rgba(245,248,250,.92);
+      border: 1px solid rgba(84,104,123,.12);
+      box-shadow: 0 6px 14px rgba(10,31,58,.04);
+    }
+    .service-banner[data-state="loading"] {
+      color: #9a5336;
+      background: rgba(255,246,240,.92);
+      border-color: rgba(255,138,84,.16);
+    }
+    .service-banner[data-state="success"] {
+      color: #2e6f31;
+      background: rgba(243,251,243,.92);
+      border-color: rgba(63,145,66,.16);
+    }
+    .service-banner[data-state="error"] {
+      color: #a3472f;
+      background: rgba(255,244,238,.92);
+      border-color: rgba(255,106,61,.16);
+    }
 
     @keyframes dashboardFadeUp {
       from {
@@ -510,6 +537,7 @@
           <span class="pill" id="range"></span>
           <span class="pill pill-refresh" id="refresh_status" data-state="live">AUTO 05:00</span>
         </div>
+        <div class="service-banner" id="service_banner" data-state="live" hidden></div>
         <div class="chart" id="c_order_trend"></div>
       </section>
     </section>
@@ -559,12 +587,14 @@
     const EMBEDDED_DATA = {};
     const IS_FILE_PROTOCOL = window.location.protocol === "file:";
     const REFRESH_MS = 5 * 60 * 1000;
+    const STATUS_POLL_MS = 5000;
     const FIXED_STAGE_WIDTH = 2048;
     const FIXED_STAGE_HEIGHT = 1152;
     const chartMap = {};
     const chartSpotlightMeta = {};
     let lastVersion = "";
     let currentDashboardData = null;
+    let currentServiceStatus = null;
     let refreshTickTimer = 0;
     let refreshResumeTimer = 0;
     let refreshNextAt = 0;
@@ -808,6 +838,10 @@
       return document.getElementById("refresh_status");
     }
 
+    function getServiceBanner() {
+      return document.getElementById("service_banner");
+    }
+
     function setRefreshStatus(text, state = "live") {
       const el = getRefreshStatus();
       if (!el) {
@@ -815,6 +849,52 @@
       }
       el.textContent = text;
       el.dataset.state = state;
+    }
+
+    function setServiceBanner(text, state = "live") {
+      const el = getServiceBanner();
+      if (!el) {
+        return;
+      }
+      const safeText = String(text || "").trim();
+      if (!safeText) {
+        el.hidden = true;
+        el.textContent = "";
+        el.dataset.state = state;
+        return;
+      }
+      el.hidden = false;
+      el.textContent = safeText;
+      el.dataset.state = state;
+    }
+
+    function serviceStatusOverridesRefresh(status) {
+      if (!status || typeof status !== "object") {
+        return false;
+      }
+      return ["starting", "updating", "relogin_in_progress", "relogin_required", "error"].includes(String(status.phase || ""));
+    }
+
+    function applyServiceStatus(status) {
+      currentServiceStatus = status && typeof status === "object" ? status : null;
+      if (!currentServiceStatus) {
+        setServiceBanner("", "live");
+        renderRefreshCountdown();
+        return;
+      }
+
+      const badgeText = String(currentServiceStatus.badge || "");
+      const badgeState = String(currentServiceStatus.badge_state || "live");
+      const message = String(currentServiceStatus.message || "");
+      const detail = String(currentServiceStatus.detail || "");
+      const bannerText = [message, detail].filter(Boolean).join(" ");
+
+      setServiceBanner(bannerText, badgeState);
+      if (serviceStatusOverridesRefresh(currentServiceStatus) && badgeText) {
+        setRefreshStatus(badgeText, badgeState);
+      } else {
+        renderRefreshCountdown();
+      }
     }
 
     function stopRefreshTimers() {
@@ -829,6 +909,12 @@
     }
 
     function renderRefreshCountdown() {
+      if (serviceStatusOverridesRefresh(currentServiceStatus)) {
+        const badgeText = String((currentServiceStatus && currentServiceStatus.badge) || "处理中");
+        const badgeState = String((currentServiceStatus && currentServiceStatus.badge_state) || "loading");
+        setRefreshStatus(badgeText, badgeState);
+        return;
+      }
       if (!refreshNextAt) {
         return;
       }
@@ -851,6 +937,18 @@
 
     function flashRefreshStatus(text, state = "success", holdMs = 1200) {
       startRefreshCountdown();
+    }
+
+    async function loadServiceStatus() {
+      try {
+        const resp = await fetch(`./status.json?_=${Date.now()}`, {cache: "no-store"});
+        if (!resp.ok) {
+          return;
+        }
+        applyServiceStatus(await resp.json());
+      } catch (err) {
+        // Ignore transient status polling failures.
+      }
     }
 
     function getSpotlightTargets() {
@@ -1338,8 +1436,10 @@
     }, 120);
 
     if (!IS_FILE_PROTOCOL) {
+      loadServiceStatus();
       loadAndRender();
       setInterval(loadAndRender, REFRESH_MS);
+      setInterval(loadServiceStatus, STATUS_POLL_MS);
     }
 
     window.addEventListener("resize", () => {

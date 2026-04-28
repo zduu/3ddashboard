@@ -10,6 +10,7 @@ from datetime import datetime, timedelta
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
+from typing import Any
 
 
 DEFAULT_INTERVAL_MINUTES = 30
@@ -24,6 +25,8 @@ SIGNAL_RELOGIN = "relogin.flag"
 SIGNAL_STOP = "stop.flag"
 PID_FILE = "dashboard.pid"
 LOG_FILE = "dashboard.log"
+LOCK_FILE = "dashboard.lock"
+STATUS_FILE = "status.json"
 
 
 def now_str() -> str:
@@ -39,6 +42,60 @@ def setup_logging(cwd: Path) -> None:
         log_fh = open(log_path, "a", encoding="utf-8", buffering=1)
         sys.stdout = log_fh
         sys.stderr = log_fh
+    except Exception:
+        pass
+
+
+def acquire_single_instance_lock(cwd: Path) -> Any | None:
+    lock_path = cwd / LOCK_FILE
+    lock_path.parent.mkdir(parents=True, exist_ok=True)
+    lock_fh = open(lock_path, "a+b")
+
+    try:
+        if sys.platform.startswith("win"):
+            import msvcrt
+
+            lock_fh.seek(0)
+            msvcrt.locking(lock_fh.fileno(), msvcrt.LK_NBLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_EX | fcntl.LOCK_NB)
+
+        lock_fh.seek(0)
+        lock_fh.truncate()
+        lock_fh.write(str(os.getpid()).encode("utf-8"))
+        lock_fh.flush()
+        return lock_fh
+    except OSError:
+        lock_fh.close()
+        return None
+
+
+def release_single_instance_lock(cwd: Path, lock_fh: Any | None) -> None:
+    if lock_fh is None:
+        return
+
+    try:
+        if sys.platform.startswith("win"):
+            import msvcrt
+
+            lock_fh.seek(0)
+            msvcrt.locking(lock_fh.fileno(), msvcrt.LK_UNLCK, 1)
+        else:
+            import fcntl
+
+            fcntl.flock(lock_fh.fileno(), fcntl.LOCK_UN)
+    except Exception:
+        pass
+
+    try:
+        lock_fh.close()
+    except Exception:
+        pass
+
+    try:
+        (cwd / LOCK_FILE).unlink(missing_ok=True)
     except Exception:
         pass
 
@@ -124,6 +181,54 @@ def show_control_dialog(cwd: Path) -> str | None:
     return result["action"]
 
 
+def show_already_starting_dialog() -> None:
+    """Show a simple notice when another instance is still starting up."""
+    try:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        root = tk.Tk()
+        root.withdraw()
+        messagebox.showinfo("3D打印数据看板", "程序已经启动或正在启动中，请勿重复双击。")
+        root.destroy()
+    except Exception:
+        pass
+
+
+def now_iso() -> str:
+    return datetime.now().isoformat(timespec="seconds")
+
+
+def write_dashboard_status(
+    dashboard_dir: Path,
+    *,
+    phase: str,
+    badge: str,
+    badge_state: str,
+    message: str,
+    detail: str = "",
+    next_run_at: str = "",
+    last_success_at: str = "",
+) -> None:
+    dashboard_dir.mkdir(parents=True, exist_ok=True)
+    simple_dir = dashboard_dir / "simple"
+    simple_dir.mkdir(parents=True, exist_ok=True)
+
+    payload = {
+        "phase": phase,
+        "badge": badge,
+        "badge_state": badge_state,
+        "message": message,
+        "detail": detail,
+        "next_run_at": next_run_at,
+        "last_success_at": last_success_at,
+        "updated_at": now_iso(),
+    }
+
+    for path in (dashboard_dir / STATUS_FILE, simple_dir / STATUS_FILE):
+        path.write_text(json.dumps(payload, ensure_ascii=False, indent=2), encoding="utf-8")
+
+
 def ensure_dashboard_placeholder(directory: Path) -> None:
     directory.mkdir(parents=True, exist_ok=True)
     index_file = directory / "index.html"
@@ -139,15 +244,67 @@ def ensure_dashboard_placeholder(directory: Path) -> None:
   <title>Dashboard Loading</title>
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f5f7fb; color: #1f2937; }
-    .box { text-align: center; padding: 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; }
-    .hint { color: #6b7280; margin-top: 8px; }
+    .box { width: min(680px, calc(100vw - 32px)); text-align: left; padding: 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08); }
+    .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; background: #e0f2fe; color: #0c4a6e; }
+    .badge[data-state="error"] { background: #fee2e2; color: #991b1b; }
+    .badge[data-state="loading"] { background: #fef3c7; color: #92400e; }
+    .badge[data-state="success"] { background: #dcfce7; color: #166534; }
+    h2 { margin: 14px 0 8px; font-size: 28px; }
+    .hint { color: #475569; margin-top: 10px; line-height: 1.6; }
+    .sub { color: #64748b; font-size: 14px; }
   </style>
 </head>
 <body>
   <div class="box">
-    <h2>看板准备中...</h2>
-    <div class="hint">正在执行首次抓取，完成后请刷新页面。</div>
+    <div class="badge" id="status_badge" data-state="loading">启动中</div>
+    <h2 id="status_title">看板准备中...</h2>
+    <div class="hint" id="status_message">正在执行首次抓取，完成后请刷新页面。</div>
+    <div class="hint sub" id="status_detail">首次启动、重新登录或更新后，页面可能延迟 10-60 秒，请勿重复操作。</div>
   </div>
+  <script>
+    const badgeEl = document.getElementById("status_badge");
+    const titleEl = document.getElementById("status_title");
+    const messageEl = document.getElementById("status_message");
+    const detailEl = document.getElementById("status_detail");
+
+    function applyStatus(status) {
+      const phase = String((status && status.phase) || "");
+      const badge = String((status && status.badge) || "启动中");
+      const badgeState = String((status && status.badge_state) || "loading");
+      const message = String((status && status.message) || "正在执行首次抓取，完成后请刷新页面。");
+      const detail = String((status && status.detail) || "首次启动、重新登录或更新后，页面可能延迟 10-60 秒，请勿重复操作。");
+
+      badgeEl.textContent = badge;
+      badgeEl.dataset.state = badgeState;
+      messageEl.textContent = message;
+      detailEl.textContent = detail;
+
+      if (phase === "relogin_required") {
+        titleEl.textContent = "需要重新登录";
+      } else if (phase === "error") {
+        titleEl.textContent = "更新失败";
+      } else if (phase === "ok") {
+        titleEl.textContent = "看板已准备完成";
+      } else {
+        titleEl.textContent = "看板准备中...";
+      }
+    }
+
+    async function loadStatus() {
+      try {
+        const resp = await fetch(`./status.json?_=${Date.now()}`, { cache: "no-store" });
+        if (!resp.ok) {
+          return;
+        }
+        applyStatus(await resp.json());
+      } catch (err) {
+        // Ignore transient polling failures on the placeholder page.
+      }
+    }
+
+    loadStatus();
+    setInterval(loadStatus, 5000);
+  </script>
 </body>
 </html>
 """
@@ -534,89 +691,172 @@ def main() -> int:
     if IS_FROZEN:
         cwd = Path(sys.executable).resolve().parent
 
-    # If service is already running, show control dialog instead of starting again.
-    if is_service_running(cwd):
-        action = show_control_dialog(cwd)
-        if action == "relogin":
-            (cwd / SIGNAL_RELOGIN).write_text("", encoding="utf-8")
-        elif action == "stop":
-            (cwd / SIGNAL_STOP).write_text("", encoding="utf-8")
+    instance_lock = acquire_single_instance_lock(cwd)
+    if instance_lock is None:
+        if is_service_running(cwd):
+            action = show_control_dialog(cwd)
+            if action == "relogin":
+                (cwd / SIGNAL_RELOGIN).write_text("", encoding="utf-8")
+            elif action == "stop":
+                (cwd / SIGNAL_STOP).write_text("", encoding="utf-8")
+        else:
+            show_already_starting_dialog()
         return 0
 
-    # Step 1: Ensure login BEFORE going silent — browser must be visible.
-    if not ensure_login(args, cwd):
-        return 1
+    try:
+        # Step 1: Ensure login BEFORE going silent — browser must be visible.
+        if not ensure_login(args, cwd):
+            return 1
 
-    # Step 2: Now go into background mode — redirect output to log file.
-    setup_logging(cwd)
-    write_pid(cwd)
+        # Step 2: Now go into background mode — redirect output to log file.
+        setup_logging(cwd)
+        write_pid(cwd)
 
-    dashboard_dir = (cwd / args.dashboard_dir).resolve()
-    output_dir = (cwd / args.output_dir).resolve()
-    ensure_dashboard_placeholder(dashboard_dir)
-    if args.interval_minutes <= 0:
-        print("[ERROR] --interval-minutes must be > 0")
-        remove_pid(cwd)
-        return 1
-    if args.keep_output_runs <= 0 or args.keep_single_files <= 0:
-        print("[ERROR] --keep-output-runs and --keep-single-files must be > 0")
-        remove_pid(cwd)
-        return 1
+        dashboard_dir = (cwd / args.dashboard_dir).resolve()
+        output_dir = (cwd / args.output_dir).resolve()
+        state_path = (cwd / args.state_path).resolve()
+        ensure_dashboard_placeholder(dashboard_dir)
+        last_success_at = ""
+        if args.interval_minutes <= 0:
+            print("[ERROR] --interval-minutes must be > 0")
+            remove_pid(cwd)
+            return 1
+        if args.keep_output_runs <= 0 or args.keep_single_files <= 0:
+            print("[ERROR] --keep-output-runs and --keep-single-files must be > 0")
+            remove_pid(cwd)
+            return 1
 
-    # Clean stale signal files from previous runs.
-    check_signal(cwd, SIGNAL_RELOGIN)
-    check_signal(cwd, SIGNAL_STOP)
+        # Clean stale signal files from previous runs.
+        check_signal(cwd, SIGNAL_RELOGIN)
+        check_signal(cwd, SIGNAL_STOP)
 
-    server = start_web_server(dashboard_dir, args.host, args.port)
-    interval = timedelta(minutes=args.interval_minutes)
-    next_run = datetime.now() if not args.no_run_immediately else datetime.now() + interval
-    last_interrupt_ts = 0.0
-    if not args.no_clean_output:
-        d, f = cleanup_output_dir(output_dir, args.keep_output_runs, args.keep_single_files)
-        if d or f:
-            print(f"[{now_str()}] [CLEAN] Removed {d} old run dirs and {f} old files.")
-    print(f"[{now_str()}] [TASK] Interval: every {args.interval_minutes} minutes")
+        server = start_web_server(dashboard_dir, args.host, args.port)
+        interval = timedelta(minutes=args.interval_minutes)
+        next_run = datetime.now() if not args.no_run_immediately else datetime.now() + interval
+        last_interrupt_ts = 0.0
+        write_dashboard_status(
+            dashboard_dir,
+            phase="starting",
+            badge="启动中",
+            badge_state="loading",
+            message="程序已启动，正在准备展示页。",
+            detail="首次启动、重新登录或更新后，页面可能延迟 10-60 秒，请勿重复操作。",
+            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+            last_success_at=last_success_at,
+        )
+        if not args.no_clean_output:
+            d, f = cleanup_output_dir(output_dir, args.keep_output_runs, args.keep_single_files)
+            if d or f:
+                print(f"[{now_str()}] [CLEAN] Removed {d} old run dirs and {f} old files.")
+        print(f"[{now_str()}] [TASK] Interval: every {args.interval_minutes} minutes")
 
-    while True:
-        try:
-            # Check stop signal.
-            if check_signal(cwd, SIGNAL_STOP):
-                print(f"[{now_str()}] [SYS] Stop signal received, shutting down.")
-                server.shutdown()
-                remove_pid(cwd)
-                return 0
+        while True:
+            try:
+                # Check stop signal.
+                if check_signal(cwd, SIGNAL_STOP):
+                    print(f"[{now_str()}] [SYS] Stop signal received, shutting down.")
+                    server.shutdown()
+                    remove_pid(cwd)
+                    return 0
 
-            # Check re-login signal.
-            if check_signal(cwd, SIGNAL_RELOGIN):
-                print(f"[{now_str()}] [SYS] Re-login signal received.")
-                run_main_command(args, cwd, ["login"], interactive=True)
-                print(f"[{now_str()}] [SYS] Re-login complete.")
+                # Check re-login signal.
+                if check_signal(cwd, SIGNAL_RELOGIN):
+                    print(f"[{now_str()}] [SYS] Re-login signal received.")
+                    write_dashboard_status(
+                        dashboard_dir,
+                        phase="relogin_in_progress",
+                        badge="重新登录中",
+                        badge_state="loading",
+                        message="请在弹出的浏览器中完成登录。",
+                        detail="登录完成后关闭浏览器，然后等待 10-60 秒自动刷新页面，请勿重复点击。",
+                        next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                        last_success_at=last_success_at,
+                    )
+                    login_code = run_main_command(args, cwd, ["login"], interactive=True)
+                    if login_code == 0 and has_usable_state(state_path):
+                        print(f"[{now_str()}] [SYS] Re-login complete.")
+                        next_run = datetime.now()
+                        write_dashboard_status(
+                            dashboard_dir,
+                            phase="updating",
+                            badge="登录已更新",
+                            badge_state="loading",
+                            message="登录已完成，正在抓取最新数据。",
+                            detail="展示页可能延迟 10-60 秒刷新，请勿重复点击。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+                    else:
+                        write_dashboard_status(
+                            dashboard_dir,
+                            phase="error",
+                            badge="重新登录未完成",
+                            badge_state="error",
+                            message="这次重新登录没有完成，当前还没有刷新出新数据。",
+                            detail="如果你刚关闭浏览器，请等待 10-60 秒；若长时间无变化，再双击程序并点击“重新登录”。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+
+                now = datetime.now()
+                if now >= next_run:
+                    write_dashboard_status(
+                        dashboard_dir,
+                        phase="updating",
+                        badge="更新中",
+                        badge_state="loading",
+                        message="正在抓取和生成最新展示数据。",
+                        detail="页面可能延迟 10-60 秒刷新，请勿重复操作。",
+                        next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                        last_success_at=last_success_at,
+                    )
+                    started = time.time()
+                    code = run_once(args, cwd)
+                    elapsed = time.time() - started
+                    status = "SUCCESS" if code == 0 else "FAILED"
+                    print(f"[{now_str()}] [TASK] {status}, elapsed: {elapsed:.1f}s")
+                    if not args.no_clean_output:
+                        d, f = cleanup_output_dir(output_dir, args.keep_output_runs, args.keep_single_files)
+                        if d or f:
+                            print(f"[{now_str()}] [CLEAN] Removed {d} old run dirs and {f} old files.")
+                    next_run = datetime.now() + interval
+                    print(f"[{now_str()}] [TASK] Next run at: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
+                    if code == 0:
+                        last_success_at = now_str()
+                        write_dashboard_status(
+                            dashboard_dir,
+                            phase="ok",
+                            badge="运行中",
+                            badge_state="live",
+                            message="更新成功。若页面内容未立即变化，请等待 10-60 秒自动刷新，不要重复操作。",
+                            detail=f"上次成功更新时间：{last_success_at}。下次自动更新：{next_run.strftime('%Y-%m-%d %H:%M:%S')}。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+                    else:
+                        write_dashboard_status(
+                            dashboard_dir,
+                            phase="error" if has_usable_state(state_path) else "relogin_required",
+                            badge="更新失败" if has_usable_state(state_path) else "需要重新登录",
+                            badge_state="error",
+                            message="本次更新没有成功。若只是刚操作完，请先等待 10-60 秒，不要重复点击。",
+                            detail="如果页面长时间空白或一直不更新，再双击程序并点击“重新登录”。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+                time.sleep(1.0)
+            except KeyboardInterrupt:
+                ts = time.time()
+                if ts - last_interrupt_ts <= 3.0:
+                    print(f"[{now_str()}] [SYS] Stopped by user.")
+                    server.shutdown()
+                    remove_pid(cwd)
+                    return 0
+                last_interrupt_ts = ts
+                print(f"[{now_str()}] [SYS] Interrupt received. Press Ctrl+C again within 3s to stop.")
                 next_run = datetime.now()
-
-            now = datetime.now()
-            if now >= next_run:
-                started = time.time()
-                code = run_once(args, cwd)
-                elapsed = time.time() - started
-                status = "SUCCESS" if code == 0 else "FAILED"
-                print(f"[{now_str()}] [TASK] {status}, elapsed: {elapsed:.1f}s")
-                if not args.no_clean_output:
-                    d, f = cleanup_output_dir(output_dir, args.keep_output_runs, args.keep_single_files)
-                    if d or f:
-                        print(f"[{now_str()}] [CLEAN] Removed {d} old run dirs and {f} old files.")
-                next_run = datetime.now() + interval
-                print(f"[{now_str()}] [TASK] Next run at: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
-            time.sleep(1.0)
-        except KeyboardInterrupt:
-            ts = time.time()
-            if ts - last_interrupt_ts <= 3.0:
-                print(f"[{now_str()}] [SYS] Stopped by user.")
-                server.shutdown()
-                remove_pid(cwd)
-                return 0
-            last_interrupt_ts = ts
-            print(f"[{now_str()}] [SYS] Interrupt received. Press Ctrl+C again within 3s to stop.")
-            next_run = datetime.now()
+    finally:
+        release_single_instance_lock(cwd, instance_lock)
 
 
 if __name__ == "__main__":

@@ -4,6 +4,7 @@ import json
 import re
 import shutil
 import sys
+import time
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
@@ -24,6 +25,11 @@ DEFAULT_DASHBOARD_DIR = Path("dashboard")
 DEFAULT_WAIT_MS = 10000
 DEFAULT_FILTER_WAIT_MS = 3500
 IGNORED_CAPTURE_PATTERNS = []
+COOKIE_PERSIST_YEARS = 10
+COOKIE_PERSIST_DOMAINS = [
+    "jaccount.sjtu.edu.cn",
+    "make.sjtu.edu.cn",
+]
 
 
 def ensure_parent_dir(path: Path) -> None:
@@ -52,6 +58,52 @@ def safe_slug(text: str) -> str:
     return slug or "item"
 
 
+def should_persist_cookie(cookie: dict[str, Any], domains: list[str] | None) -> bool:
+    if domains is None:
+        return True
+    domain = str(cookie.get("domain", ""))
+    return any(domain == item or domain.endswith(f".{item}") for item in domains)
+
+
+def rewrite_cookie_expiry(
+    storage_state: dict[str, Any],
+    expires_at: float,
+    domains: list[str] | None,
+) -> dict[str, Any]:
+    cookies = storage_state.get("cookies", [])
+    if not isinstance(cookies, list):
+        return storage_state
+
+    for cookie in cookies:
+        if isinstance(cookie, dict) and should_persist_cookie(cookie, domains):
+            cookie["expires"] = expires_at
+    return storage_state
+
+
+def compute_cookie_expiry(years: int) -> float:
+    return time.time() + years * 365 * 24 * 60 * 60
+
+
+def read_storage_state(context: Any) -> dict[str, Any]:
+    try:
+        return context.storage_state(indexed_db=True)
+    except TypeError:
+        return context.storage_state()
+
+
+def save_storage_state(
+    context: Any,
+    path: Path,
+    years: int,
+    domains: list[str] | None,
+) -> None:
+    ensure_parent_dir(path)
+    storage_state = read_storage_state(context)
+    expires_at = compute_cookie_expiry(years)
+    storage_state = rewrite_cookie_expiry(storage_state, expires_at, domains)
+    path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+
+
 def save_login_state(page_url: str, state_path: Path, browser_channel: str | None) -> None:
     ensure_parent_dir(state_path)
     with sync_playwright() as p:
@@ -68,7 +120,12 @@ def save_login_state(page_url: str, state_path: Path, browser_channel: str | Non
             pass
 
         try:
-            context.storage_state(path=str(state_path))
+            save_storage_state(
+                context,
+                state_path,
+                COOKIE_PERSIST_YEARS,
+                COOKIE_PERSIST_DOMAINS,
+            )
         except Exception:
             pass
 
