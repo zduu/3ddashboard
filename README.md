@@ -26,6 +26,9 @@ python -m playwright install chromium
 # Windows（免环境 .exe）
 dist\dashboard_runner.exe  # 双击即运行
 
+# macOS（免环境 .app）
+dist/dashboard_runner.app
+
 # Windows（命令行）
 python run_universal.py
 
@@ -55,22 +58,32 @@ python run.py --single
 
 快捷启动：
 - Windows（免环境）：双击 `dist\dashboard_runner.exe`（内置 Python + Playwright）
+- macOS（免环境）：打开 `dist/dashboard_runner.app`
 - Windows / macOS / Linux：在终端运行 `python run_universal.py`
 
-生成免环境 EXE：
+生成免环境发布包：
 
 ```powershell
 ./package_windows.ps1
+
+# macOS
+./package_macos.sh
 ```
 
 脚本会自动：
 - 创建/复用 `.venv`
 - 安装依赖 + PyInstaller + Playwright 浏览器
-- 生成 `dist\dashboard_runner.exe` 并携带 `ms-playwright` 目录
+- 生成 `dist\dashboard_runner.exe`
 - exe 采用 GUI 模式（`pythonw`），运行时不再弹出控制台窗口；日志可查看 `logs/service.log`
+- 生成 `dist/dashboard_runner.app`
 
 CI 发布：
-- 推送 `v*` 标签或在 Actions 手动触发 `build-release`，GitHub Actions 会在 Windows 环境运行 `package_windows.ps1`，并把 `dist` 压缩后作为 Release 附件。
+- 推送 `v*` 标签或在 Actions 手动触发 `build-release`，GitHub Actions 会同时构建 Windows 和 macOS 版本，并把压缩包作为 Release 附件。
+
+macOS 使用说明：
+- Release 附件为 `dashboard_runner_macos.zip`，解压后得到 `dashboard_runner.app`
+- 首次打开未签名应用时，如果系统拦截，请在 Finder 中右键应用并选择“打开”
+- 当前发布包默认依赖目标机器已安装可用浏览器，如 Chrome、Edge 或其他 Chromium 浏览器
 
 命令行运行说明：
 - 默认命令：`python run_universal.py`

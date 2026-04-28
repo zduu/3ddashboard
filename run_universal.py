@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import argparse
 import json
 import os
@@ -369,7 +371,13 @@ def run_subprocess(cmd: list[str], cwd: Path, interactive: bool = False) -> int:
 
 def resolve_runtime_root(script_path: Path) -> Path:
     if IS_FROZEN:
-        return Path(sys.executable).resolve().parent
+        exe_path = Path(sys.executable).resolve()
+        parts = exe_path.parts
+        if sys.platform == "darwin":
+            for idx, part in enumerate(parts):
+                if part.endswith(".app"):
+                    return Path(*parts[: idx + 1]).resolve().parent
+        return exe_path.parent
     return script_path.resolve().parent
 
 
@@ -687,9 +695,7 @@ def ensure_login(args: argparse.Namespace, cwd: Path) -> bool:
 
 def main() -> int:
     args = build_parser().parse_args()
-    cwd = Path(__file__).resolve().parent
-    if IS_FROZEN:
-        cwd = Path(sys.executable).resolve().parent
+    cwd = resolve_runtime_root(Path(__file__))
 
     instance_lock = acquire_single_instance_lock(cwd)
     if instance_lock is None:
