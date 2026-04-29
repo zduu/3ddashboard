@@ -4,6 +4,7 @@ import argparse
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import threading
@@ -348,25 +349,147 @@ def start_web_server(directory: Path, host: str, port: int) -> ThreadingHTTPServ
     return server
 
 
+def find_listen_pids_by_port(port: int) -> list[int]:
+    if port <= 0:
+        return []
+
+    if sys.platform.startswith("win"):
+        try:
+            proc = subprocess.run(
+                ["netstat", "-ano", "-p", "tcp"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+        except Exception:
+            return []
+
+        pids: set[int] = set()
+        target = f":{port}"
+        for line in proc.stdout.splitlines():
+            text = line.strip()
+            if "LISTENING" not in text.upper() or target not in text:
+                continue
+            parts = text.split()
+            if len(parts) < 5:
+                continue
+            try:
+                pids.add(int(parts[-1]))
+            except ValueError:
+                continue
+        return sorted(pids)
+
+    try:
+        proc = subprocess.run(
+            ["lsof", "-nP", f"-iTCP:{port}", "-sTCP:LISTEN", "-t"],
+            capture_output=True,
+            text=True,
+            encoding="utf-8",
+            errors="replace",
+            check=False,
+        )
+    except Exception:
+        return []
+
+    pids: set[int] = set()
+    for line in proc.stdout.splitlines():
+        text = line.strip()
+        if not text:
+            continue
+        try:
+            pids.add(int(text))
+        except ValueError:
+            continue
+    return sorted(pids)
+
+
+def terminate_pid(pid: int) -> bool:
+    if pid <= 0 or pid == os.getpid():
+        return False
+
+    try:
+        if sys.platform.startswith("win"):
+            proc = subprocess.run(
+                ["taskkill", "/PID", str(pid), "/F"],
+                capture_output=True,
+                text=True,
+                encoding="utf-8",
+                errors="replace",
+                check=False,
+            )
+            return proc.returncode == 0
+
+        os.kill(pid, 15)
+        for _ in range(20):
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return True
+            time.sleep(0.1)
+        os.kill(pid, 9)
+        for _ in range(10):
+            try:
+                os.kill(pid, 0)
+            except OSError:
+                return True
+            time.sleep(0.1)
+    except OSError:
+        return True
+    except Exception:
+        return False
+    return False
+
+
+def auto_free_port(host: str, port: int) -> list[int]:
+    del host
+    released: list[int] = []
+    for pid in find_listen_pids_by_port(port):
+        if terminate_pid(pid):
+            released.append(pid)
+    return released
+
+
+def ensure_port_available(host: str, port: int) -> None:
+    bind_host = host if host not in {"0.0.0.0", "::"} else ""
+    probe = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    try:
+        probe.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+        probe.bind((bind_host, port))
+    except OSError as exc:
+        raise RuntimeError(
+            f"端口 {port} 已被占用。\n"
+            f"请先关闭已经运行的看板程序，或改用其他端口，例如：\n"
+            f"  python run_universal.py --port {port + 1}"
+        ) from exc
+    finally:
+        probe.close()
+
+
 def run_subprocess(cmd: list[str], cwd: Path, interactive: bool = False) -> int:
     print(f"[{now_str()}] [TASK] Running: {' '.join(cmd)}")
     if interactive:
         proc = subprocess.run(cmd, cwd=str(cwd))
     else:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=str(cwd),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
+            bufsize=1,
         )
-        if proc.stdout.strip():
-            print(proc.stdout.strip())
-        if proc.stderr.strip():
-            print(proc.stderr.strip())
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                text = line.rstrip()
+                if text:
+                    print(text)
+        proc.wait()
     print(f"[{now_str()}] [TASK] Exit code: {proc.returncode}")
-    return proc.returncode
+    return int(proc.returncode)
 
 
 def resolve_runtime_root(script_path: Path) -> Path:
@@ -697,6 +820,11 @@ def main() -> int:
     args = build_parser().parse_args()
     cwd = resolve_runtime_root(Path(__file__))
 
+    released_pids = auto_free_port(args.host, args.port)
+    if released_pids:
+        joined = ", ".join(str(pid) for pid in released_pids)
+        print(f"[{now_str()}] [WEB] Released occupied port {args.port} from PID(s): {joined}")
+
     instance_lock = acquire_single_instance_lock(cwd)
     if instance_lock is None:
         if is_service_running(cwd):
@@ -710,6 +838,13 @@ def main() -> int:
         return 0
 
     try:
+        try:
+            ensure_port_available(args.host, args.port)
+        except RuntimeError as exc:
+            show_error_dialog("端口被占用", str(exc))
+            print(f"[ERROR] {exc}")
+            return 1
+
         # Step 1: Ensure login BEFORE going silent — browser must be visible.
         if not ensure_login(args, cwd):
             return 1

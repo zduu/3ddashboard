@@ -62,20 +62,24 @@ def run_subprocess(cmd: list[str], cwd: Path, interactive: bool = False) -> int:
         # Attach to current stdio so child can receive input (e.g., `input()` prompts).
         proc = subprocess.run(cmd, cwd=str(cwd))
     else:
-        proc = subprocess.run(
+        proc = subprocess.Popen(
             cmd,
             cwd=str(cwd),
-            capture_output=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.STDOUT,
             text=True,
             encoding="utf-8",
             errors="replace",
+            bufsize=1,
         )
-        if proc.stdout.strip():
-            print(proc.stdout.strip())
-        if proc.stderr.strip():
-            print(proc.stderr.strip())
+        if proc.stdout is not None:
+            for line in proc.stdout:
+                text = line.rstrip()
+                if text:
+                    print(text)
+        proc.wait()
     print(f"[{now_str()}] [TASK] Exit code: {proc.returncode}")
-    return proc.returncode
+    return int(proc.returncode)
 
 
 def latest_filters_summary(output_dir: Path) -> dict | None:

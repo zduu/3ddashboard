@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import argparse
+import base64
 import csv
 import json
 import re
@@ -21,6 +22,8 @@ DEFAULT_BROWSER_CHANNEL = "auto"
 DEFAULT_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/order-count"
 ASSIST_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/assist-action"
 ASSIST_API_URL = "https://make.sjtu.edu.cn/api/statistics/assist-action"
+FIRST_LOGIN_API_URL = "https://make.sjtu.edu.cn/api/user/first-login"
+MAKE_ORIGIN = "https://make.sjtu.edu.cn"
 DEFAULT_STATE_PATH = Path("state/auth_state.json")
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_DASHBOARD_DIR = Path("dashboard")
@@ -32,6 +35,7 @@ COOKIE_PERSIST_DOMAINS = [
     "jaccount.sjtu.edu.cn",
     "make.sjtu.edu.cn",
 ]
+JWT_REFRESH_MARGIN_SECONDS = 12 * 60 * 60
 
 
 def ensure_parent_dir(path: Path) -> None:
@@ -104,6 +108,178 @@ def save_storage_state(
     expires_at = compute_cookie_expiry(years)
     storage_state = rewrite_cookie_expiry(storage_state, expires_at, domains)
     path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+
+
+def load_storage_state_file(path: Path) -> dict[str, Any]:
+    return json.loads(path.read_text(encoding="utf-8"))
+
+
+def save_storage_state_file(path: Path, storage_state: dict[str, Any]) -> None:
+    ensure_parent_dir(path)
+    path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+
+
+def get_make_origin_state(storage_state: dict[str, Any]) -> dict[str, Any]:
+    origins = storage_state.setdefault("origins", [])
+    if not isinstance(origins, list):
+        origins = []
+        storage_state["origins"] = origins
+
+    for item in origins:
+        if isinstance(item, dict) and item.get("origin") == MAKE_ORIGIN:
+            local_storage = item.get("localStorage")
+            if not isinstance(local_storage, list):
+                item["localStorage"] = []
+            return item
+
+    created = {"origin": MAKE_ORIGIN, "localStorage": []}
+    origins.append(created)
+    return created
+
+
+def get_local_storage_item(origin_state: dict[str, Any], name: str) -> dict[str, Any] | None:
+    local_storage = origin_state.get("localStorage")
+    if not isinstance(local_storage, list):
+        return None
+    for item in local_storage:
+        if isinstance(item, dict) and item.get("name") == name:
+            return item
+    return None
+
+
+def upsert_local_storage_item(origin_state: dict[str, Any], name: str, value: str) -> None:
+    local_storage = origin_state.setdefault("localStorage", [])
+    if not isinstance(local_storage, list):
+        local_storage = []
+        origin_state["localStorage"] = local_storage
+    item = get_local_storage_item(origin_state, name)
+    if item is None:
+        local_storage.append({"name": name, "value": value})
+        return
+    item["value"] = value
+
+
+def read_app_user_from_storage_state(storage_state: dict[str, Any]) -> dict[str, Any] | None:
+    origin_state = get_make_origin_state(storage_state)
+    item = get_local_storage_item(origin_state, "app-user")
+    if item is None:
+        return None
+    value = item.get("value")
+    if not isinstance(value, str) or not value.strip():
+        return None
+    try:
+        data = json.loads(value)
+    except json.JSONDecodeError:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def write_app_user_to_storage_state(storage_state: dict[str, Any], app_user: dict[str, Any]) -> None:
+    origin_state = get_make_origin_state(storage_state)
+    upsert_local_storage_item(origin_state, "app-user", json.dumps(app_user, ensure_ascii=False))
+
+
+def decode_jwt_payload(token: str) -> dict[str, Any] | None:
+    if not token:
+        return None
+    parts = token.split(".")
+    if len(parts) != 3:
+        return None
+    payload = parts[1]
+    payload += "=" * (-len(payload) % 4)
+    try:
+        data = json.loads(base64.urlsafe_b64decode(payload.encode("utf-8")))
+    except Exception:
+        return None
+    return data if isinstance(data, dict) else None
+
+
+def read_app_user_token_exp(storage_state: dict[str, Any]) -> int | None:
+    app_user = read_app_user_from_storage_state(storage_state)
+    if not app_user:
+        return None
+    token = app_user.get("token")
+    if not isinstance(token, str) or not token:
+        return None
+    payload = decode_jwt_payload(token)
+    exp = None if payload is None else payload.get("exp")
+    return exp if isinstance(exp, int) else None
+
+
+def needs_app_user_token_refresh(
+    state_path: Path,
+    refresh_margin_seconds: int = JWT_REFRESH_MARGIN_SECONDS,
+) -> tuple[bool, str]:
+    if not state_path.exists():
+        return False, "state_missing"
+
+    storage_state = load_storage_state_file(state_path)
+    exp = read_app_user_token_exp(storage_state)
+    if exp is None:
+        return True, "token_missing"
+
+    remaining = exp - int(time.time())
+    if remaining <= 0:
+        return True, "token_expired"
+    if remaining <= refresh_margin_seconds:
+        return True, "token_expiring_soon"
+    return False, "token_still_valid"
+
+
+def merge_first_login_result(
+    state_path: Path,
+    response_body: dict[str, Any],
+) -> None:
+    result = response_body.get("result")
+    if not isinstance(result, dict):
+        raise RuntimeError("first-login result missing")
+
+    user_info = result.get("user_info")
+    token = result.get("token")
+    if not isinstance(user_info, dict) or not isinstance(token, str) or not token:
+        raise RuntimeError("first-login did not return a valid token")
+
+    storage_state = load_storage_state_file(state_path)
+    app_user = read_app_user_from_storage_state(storage_state) or {}
+    app_user.update(user_info)
+    app_user["token"] = token
+    write_app_user_to_storage_state(storage_state, app_user)
+    save_storage_state_file(state_path, storage_state)
+
+
+def refresh_app_user_token(
+    state_path: Path,
+    refresh_margin_seconds: int = JWT_REFRESH_MARGIN_SECONDS,
+) -> bool:
+    should_refresh, reason = needs_app_user_token_refresh(state_path, refresh_margin_seconds)
+    if not should_refresh:
+        return False
+
+    print(f"[AUTH] Refreshing app-user.token via cookie session ({reason}).")
+    with sync_playwright() as p:
+        request_context = p.request.new_context(storage_state=str(state_path))
+        try:
+            resp = request_context.get(FIRST_LOGIN_API_URL)
+            status = int(getattr(resp, "status", 0) or 0)
+            if status >= 400:
+                raise RuntimeError(f"first-login HTTP {status}: {resp.text()[:300]}")
+            response_body = resp.json()
+        finally:
+            request_context.dispose()
+
+    if not isinstance(response_body, dict):
+        raise RuntimeError("first-login returned invalid JSON")
+    merge_first_login_result(state_path, response_body)
+    print("[AUTH] app-user.token refreshed.")
+    return True
+
+
+def ensure_fresh_login_state(
+    state_path: Path,
+    refresh_margin_seconds: int = JWT_REFRESH_MARGIN_SECONDS,
+) -> bool:
+    refreshed = refresh_app_user_token(state_path, refresh_margin_seconds)
+    return refreshed
 
 
 def save_login_state(page_url: str, state_path: Path, browser_channel: str | None) -> None:
@@ -773,6 +949,7 @@ def run_fetch(
     generate_dashboard: bool,
 ) -> int:
     orders_path: Path | None = None
+    ensure_fresh_login_state(state_path)
 
     if single:
         json_file, csv_file = capture_data(
