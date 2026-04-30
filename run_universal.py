@@ -256,6 +256,91 @@ class RuntimeStatusStore:
             return dict(self._data)
 
 
+class ActionTile:
+    def __init__(
+        self,
+        tk: Any,
+        parent: Any,
+        *,
+        text: str,
+        command: Any,
+        bg: str,
+        fg: str,
+        active_bg: str,
+        active_fg: str,
+        font: Any,
+        padx: int,
+        pady: int,
+        wraplength: int,
+    ) -> None:
+        self.tk = tk
+        self.command = command
+        self.normal_bg = bg
+        self.normal_fg = fg
+        self.active_bg = active_bg
+        self.active_fg = active_fg
+
+        self.frame = tk.Frame(parent, bg=bg, highlightthickness=0, bd=0, takefocus=1)
+        self.label = tk.Label(
+            self.frame,
+            text=text,
+            justify="center",
+            anchor="center",
+            bg=bg,
+            fg=fg,
+            font=font,
+            padx=padx,
+            pady=pady,
+            wraplength=wraplength,
+        )
+        self.label.pack(fill="both", expand=True)
+
+        for widget in (self.frame, self.label):
+            widget.bind("<Button-1>", self._on_click)
+            widget.bind("<Enter>", self._on_enter)
+            widget.bind("<Leave>", self._on_leave)
+
+        self.frame.bind("<Return>", self._on_click)
+        self.frame.bind("<space>", self._on_click)
+
+    def grid(self, **kwargs: Any) -> None:
+        self.frame.grid(**kwargs)
+
+    def configure(self, **kwargs: Any) -> None:
+        if "text" in kwargs:
+            self.label.configure(text=kwargs.pop("text"))
+        if "bg" in kwargs:
+            self.normal_bg = kwargs.pop("bg")
+        if "fg" in kwargs:
+            self.normal_fg = kwargs.pop("fg")
+        if "activebackground" in kwargs:
+            self.active_bg = kwargs.pop("activebackground")
+        if "activeforeground" in kwargs:
+            self.active_fg = kwargs.pop("activeforeground")
+        self._apply_normal_style()
+
+    def _apply_normal_style(self) -> None:
+        self.frame.configure(bg=self.normal_bg)
+        self.label.configure(bg=self.normal_bg, fg=self.normal_fg)
+
+    def _apply_active_style(self) -> None:
+        self.frame.configure(bg=self.active_bg)
+        self.label.configure(bg=self.active_bg, fg=self.active_fg)
+
+    def _on_click(self, _event: Any) -> None:
+        try:
+            self.frame.focus_set()
+        except Exception:
+            pass
+        self.command()
+
+    def _on_enter(self, _event: Any) -> None:
+        self._apply_active_style()
+
+    def _on_leave(self, _event: Any) -> None:
+        self._apply_normal_style()
+
+
 class ControlPanelApp:
     def __init__(self, cwd: Path, args: argparse.Namespace, status_store: RuntimeStatusStore) -> None:
         import tkinter as tk
@@ -371,22 +456,18 @@ class ControlPanelApp:
 
         label_text = title if not subtitle else f"{title}\n{subtitle}"
 
-        btn = self.tk.Button(
+        btn = ActionTile(
+            self.tk,
             parent,
             text=label_text,
             command=command,
-            justify="center",
-            anchor="center",
-            width=width,
-            height=height,
-            padx=padx,
-            pady=pady,
-            relief="flat",
             bg=bg,
             fg=fg,
-            activebackground=active,
-            activeforeground=fg,
             font=font,
+            active_bg=active,
+            active_fg=fg,
+            padx=padx,
+            pady=pady,
             wraplength=wraplength,
         )
         btn.grid(row=row, column=column, sticky="nsew", padx=(0 if column == 0 else 10, 0), pady=(0 if row == 0 else 10, 0))

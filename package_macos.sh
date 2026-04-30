@@ -8,20 +8,101 @@ write_step() {
   printf '[build] %s\n' "$1"
 }
 
+resolve_python_bin() {
+  if [[ -n "${PYTHON_BIN:-}" ]]; then
+    printf '%s\n' "$PYTHON_BIN"
+    return 0
+  fi
+
+  if command -v python >/dev/null 2>&1; then
+    command -v python
+    return 0
+  fi
+
+  if command -v python3 >/dev/null 2>&1; then
+    command -v python3
+    return 0
+  fi
+
+  return 1
+}
+
+python_identity_json() {
+  local python_bin="$1"
+  "$python_bin" - <<'PY'
+import json
+import os
+import sys
+
+payload = {
+    "executable": os.path.realpath(sys.executable),
+    "base_executable": os.path.realpath(getattr(sys, "_base_executable", sys.executable)),
+    "version": ".".join(str(part) for part in sys.version_info[:3]),
+    "major_minor": ".".join(str(part) for part in sys.version_info[:2]),
+}
+print(json.dumps(payload, ensure_ascii=False))
+PY
+}
+
+venv_matches_python() {
+  local target_python="$1"
+
+  if [[ ! -x .venv/bin/python ]]; then
+    return 1
+  fi
+
+  local target_json venv_json
+  target_json="$(python_identity_json "$target_python")" || return 1
+  venv_json="$(python_identity_json .venv/bin/python)" || return 1
+
+  python3 - "$target_json" "$venv_json" <<'PY'
+import json
+import sys
+
+target = json.loads(sys.argv[1])
+venv = json.loads(sys.argv[2])
+
+same_base = venv["base_executable"] == target["executable"]
+same_version = venv["major_minor"] == target["major_minor"]
+raise SystemExit(0 if same_base and same_version else 1)
+PY
+}
+
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 cd "$SCRIPT_DIR"
 
 write_step "Cleaning previous build output"
 rm -rf "$OUTPUT_DIR" build
 
-PYTHON_BIN="${PYTHON_BIN:-python3}"
-if ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
-  echo "[build] Error: Python not found: $PYTHON_BIN" >&2
+PYTHON_BIN="$(resolve_python_bin)"
+if [[ -z "$PYTHON_BIN" ]] || ! command -v "$PYTHON_BIN" >/dev/null 2>&1; then
+  echo "[build] Error: Python not found." >&2
   exit 1
 fi
 
+PYTHON_BIN="$(command -v "$PYTHON_BIN")"
+PYTHON_INFO="$(python_identity_json "$PYTHON_BIN")"
+PYTHON_PATH="$("$PYTHON_BIN" - "$PYTHON_INFO" <<'PY'
+import json, sys
+print(json.loads(sys.argv[1])["executable"])
+PY
+)"
+PYTHON_VERSION="$("$PYTHON_BIN" - "$PYTHON_INFO" <<'PY'
+import json, sys
+print(json.loads(sys.argv[1])["version"])
+PY
+)"
+
+write_step "Using Python: $PYTHON_PATH (version $PYTHON_VERSION)"
+
 write_step "Installing dependencies"
+if [[ -d .venv ]] && ! venv_matches_python "$PYTHON_BIN"; then
+  write_step "Recreating .venv because it does not match the selected Python"
+  rm -rf .venv
+fi
+
 if [[ ! -d .venv ]]; then
+  write_step "Creating .venv from $PYTHON_PATH"
   "$PYTHON_BIN" -m venv .venv
 fi
 
