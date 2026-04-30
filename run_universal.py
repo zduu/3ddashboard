@@ -9,6 +9,7 @@ import subprocess
 import sys
 import threading
 import time
+import webbrowser
 from datetime import datetime, timedelta
 from functools import partial
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -21,11 +22,15 @@ DEFAULT_HOST = "0.0.0.0"
 DEFAULT_PORT = 8000
 DEFAULT_KEEP_OUTPUT_RUNS = 3
 DEFAULT_KEEP_SINGLE_FILES = 3
+RUN_ONCE_RELOGIN_REQUIRED = 3
+RUN_NOW_DEBOUNCE_SECONDS = 120
 
 IS_FROZEN = getattr(sys, "frozen", False)
 
 SIGNAL_RELOGIN = "relogin.flag"
 SIGNAL_STOP = "stop.flag"
+SIGNAL_SHOW_PANEL = "show_panel.flag"
+SIGNAL_RUN_NOW = "run_now.flag"
 PID_FILE = "dashboard.pid"
 LOG_FILE = "dashboard.log"
 LOCK_FILE = "dashboard.lock"
@@ -125,6 +130,10 @@ def check_signal(cwd: Path, name: str) -> bool:
     return False
 
 
+def write_signal(cwd: Path, name: str) -> None:
+    (cwd / name).write_text("", encoding="utf-8")
+
+
 def is_service_running(cwd: Path) -> bool:
     """Check if a service instance is already running via PID file."""
     pid_path = cwd / PID_FILE
@@ -149,6 +158,27 @@ def is_service_running(cwd: Path) -> bool:
             return True
         except OSError:
             return False
+
+
+def build_dashboard_url(host: str, port: int) -> str:
+    display_host = host
+    if host in {"0.0.0.0", "::", ""}:
+        display_host = "127.0.0.1"
+    return f"http://{display_host}:{port}"
+
+
+def open_local_path(path: Path) -> None:
+    target = str(path.resolve())
+    try:
+        if sys.platform.startswith("win"):
+            os.startfile(target)  # type: ignore[attr-defined]
+            return
+        if sys.platform == "darwin":
+            subprocess.Popen(["open", target])
+            return
+        subprocess.Popen(["xdg-open", target])
+    except Exception:
+        pass
 
 
 def show_control_dialog(cwd: Path) -> str | None:
@@ -196,6 +226,310 @@ def show_already_starting_dialog() -> None:
         root.destroy()
     except Exception:
         pass
+
+
+class RuntimeStatusStore:
+    def __init__(self, dashboard_url: str) -> None:
+        self._lock = threading.Lock()
+        self._data: dict[str, Any] = {
+            "phase": "starting",
+            "badge": "启动中",
+            "badge_state": "loading",
+            "message": "程序已启动，正在准备管理面板。",
+            "detail": "请勿重复双击；再次双击会直接唤醒这个面板。",
+            "next_run_at": "",
+            "last_success_at": "",
+            "updated_at": now_iso(),
+            "dashboard_url": dashboard_url,
+            "service_alive": True,
+            "exit_requested": False,
+            "force_exit_requested": False,
+        }
+
+    def update(self, **fields: Any) -> None:
+        with self._lock:
+            self._data.update(fields)
+            self._data["updated_at"] = now_iso()
+
+    def snapshot(self) -> dict[str, Any]:
+        with self._lock:
+            return dict(self._data)
+
+
+class ControlPanelApp:
+    def __init__(self, cwd: Path, args: argparse.Namespace, status_store: RuntimeStatusStore) -> None:
+        import tkinter as tk
+        from tkinter import messagebox
+
+        self.cwd = cwd
+        self.args = args
+        self.status_store = status_store
+        self.tk = tk
+        self.messagebox = messagebox
+        self.root = tk.Tk()
+        self.root.title("3D打印数据看板")
+        self.root.resizable(False, False)
+        self.root.configure(bg="#f4efe6")
+        self.root.geometry(self._center_geometry(760, 520))
+        self.root.minsize(760, 520)
+        self.root.protocol("WM_DELETE_WINDOW", self._handle_close_request)
+        if sys.platform == "darwin":
+            try:
+                self.root.createcommand("tk::mac::Quit", self._handle_close_request)
+            except Exception:
+                pass
+
+        shell = tk.Frame(self.root, bg="#f4efe6")
+        shell.pack(fill="both", expand=True, padx=22, pady=22)
+
+        action_grid = tk.Frame(shell, bg="#f4efe6")
+        action_grid.pack(fill="both", expand=True)
+        for idx in range(2):
+            action_grid.grid_columnconfigure(idx, weight=1)
+            action_grid.grid_rowconfigure(idx, weight=1)
+
+        self.open_btn = self._make_action_button(
+            action_grid,
+            "打开看板",
+            "",
+            self.open_dashboard,
+            0,
+            0,
+            primary=True,
+            large=True,
+        )
+        self.refresh_btn = self._make_action_button(
+            action_grid,
+            "数据更新",
+            "",
+            self.request_run_now,
+            0,
+            1,
+            large=True,
+        )
+        self.relogin_btn = self._make_action_button(
+            action_grid,
+            "重新登录",
+            "",
+            self.request_relogin,
+            1,
+            0,
+            large=True,
+        )
+        self.stop_btn = self._make_action_button(
+            action_grid,
+            "停止服务",
+            "",
+            self.request_stop,
+            1,
+            1,
+            danger=True,
+            large=True,
+        )
+
+        self._refresh_ui()
+        self.root.after(500, self._poll)
+
+    def _make_action_button(
+        self,
+        parent: Any,
+        title: str,
+        subtitle: str,
+        command: Any,
+        row: int,
+        column: int,
+        *,
+        primary: bool = False,
+        danger: bool = False,
+        large: bool = False,
+    ) -> Any:
+        bg = "#ffffff"
+        fg = "#24323f"
+        active = "#f4f7fa"
+        if primary:
+            bg = "#d97a2b"
+            fg = "#ffffff"
+            active = "#c96c21"
+        elif danger:
+            bg = "#f9e0dc"
+            fg = "#8f2d1f"
+            active = "#f2d0ca"
+
+        width = 18
+        height = 3
+        padx = 12
+        pady = 10
+        font = ("Microsoft YaHei", 10, "bold")
+        wraplength = 135
+        if large:
+            width = 18
+            height = 7
+            padx = 18
+            pady = 18
+            font = ("Microsoft YaHei", 20, "bold")
+            wraplength = 220
+
+        label_text = title if not subtitle else f"{title}\n{subtitle}"
+
+        btn = self.tk.Button(
+            parent,
+            text=label_text,
+            command=command,
+            justify="center",
+            anchor="center",
+            width=width,
+            height=height,
+            padx=padx,
+            pady=pady,
+            relief="flat",
+            bg=bg,
+            fg=fg,
+            activebackground=active,
+            activeforeground=fg,
+            font=font,
+            wraplength=wraplength,
+        )
+        btn.grid(row=row, column=column, sticky="nsew", padx=(0 if column == 0 else 10, 0), pady=(0 if row == 0 else 10, 0))
+        return btn
+
+    def _center_geometry(self, width: int, height: int) -> str:
+        x = max(0, (self.root.winfo_screenwidth() - width) // 2)
+        y = max(0, (self.root.winfo_screenheight() - height) // 2)
+        return f"{width}x{height}+{x}+{y}"
+
+    def _iconify_only(self) -> None:
+        self.root.iconify()
+
+    def _handle_close_request(self) -> None:
+        snapshot = self.status_store.snapshot()
+        if not snapshot.get("service_alive", True):
+            self.status_store.update(exit_requested=True)
+            return
+
+        choice = self.messagebox.askyesnocancel(
+            "关闭 3D打印数据看板",
+            "选择“是”将停止服务并退出程序。\n选择“否”只隐藏窗口，服务继续运行。\n选择“取消”保持当前窗口。",
+        )
+        if choice is True:
+            self.request_stop()
+            return
+        if choice is False:
+            self._iconify_only()
+
+    def show_panel(self) -> None:
+        self.root.deiconify()
+        self.root.lift()
+        try:
+            self.root.attributes("-topmost", True)
+            self.root.after(250, lambda: self.root.attributes("-topmost", False))
+        except Exception:
+            pass
+        try:
+            self.root.focus_force()
+        except Exception:
+            pass
+
+    def open_dashboard(self) -> None:
+        webbrowser.open(build_dashboard_url(self.args.host, self.args.port))
+
+    def copy_dashboard_url(self) -> None:
+        try:
+            self.root.clipboard_clear()
+            self.root.clipboard_append(build_dashboard_url(self.args.host, self.args.port))
+            self.status_store.update(detail="看板地址已复制到剪贴板。")
+            self.show_panel()
+        except Exception:
+            pass
+
+    def open_log(self) -> None:
+        open_local_path(self.cwd / LOG_FILE)
+
+    def open_output_dir(self) -> None:
+        open_local_path(self.cwd / self.args.output_dir)
+
+    def request_relogin(self) -> None:
+        write_signal(self.cwd, SIGNAL_RELOGIN)
+        self.show_panel()
+
+    def request_run_now(self) -> None:
+        write_signal(self.cwd, SIGNAL_RUN_NOW)
+        self.show_panel()
+
+    def request_stop(self) -> None:
+        snapshot = self.status_store.snapshot()
+        if not snapshot.get("service_alive", True):
+            self.status_store.update(exit_requested=True)
+            return
+        self.status_store.update(force_exit_requested=True, exit_requested=True)
+        write_signal(self.cwd, SIGNAL_STOP)
+        try:
+            self.root.after(50, self.root.destroy)
+        except Exception:
+            pass
+
+    def _apply_badge_style(self, badge_state: str) -> None:
+        styles = {
+            "loading": ("#fef3c7", "#92400e"),
+            "error": ("#fee2e2", "#991b1b"),
+            "live": ("#dcfce7", "#166534"),
+            "success": ("#dcfce7", "#166534"),
+        }
+        bg, fg = styles.get(badge_state, ("#e2e8f0", "#334155"))
+        self.badge_label.configure(bg=bg, fg=fg)
+
+    def _phase_title(self, phase: str) -> str:
+        mapping = {
+            "starting": "正在启动服务",
+            "updating": "正在抓取并刷新看板数据",
+            "ok": "服务运行中",
+            "error": "服务运行异常",
+            "relogin_required": "当前需要重新登录",
+            "relogin_in_progress": "正在重新登录",
+            "stopping": "正在停止服务",
+        }
+        return mapping.get(phase, "服务状态更新中")
+
+    def _format_countdown(self, next_run_at: str) -> str:
+        if not next_run_at:
+            return "待定"
+        try:
+            target = datetime.strptime(next_run_at, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return "待定"
+        remaining = int((target - datetime.now()).total_seconds())
+        if remaining <= 0:
+            return "即将开始"
+        hours, rem = divmod(remaining, 3600)
+        minutes, seconds = divmod(rem, 60)
+        if hours > 0:
+            return f"{hours:02d}:{minutes:02d}:{seconds:02d}"
+        return f"{minutes:02d}:{seconds:02d}"
+
+    def _refresh_ui(self) -> None:
+        snapshot = self.status_store.snapshot()
+        phase = str(snapshot.get("phase", "starting"))
+        badge = str(snapshot.get("badge", "启动中"))
+        self.root.title(f"3D打印数据看板 - {badge}")
+
+        service_alive = bool(snapshot.get("service_alive", True))
+        self.stop_btn.configure(text="停止服务" if service_alive else "退出程序")
+        if phase == "relogin_required":
+            self.relogin_btn.configure(bg="#f9e0dc", fg="#8f2d1f", activebackground="#f2d0ca", activeforeground="#8f2d1f")
+        else:
+            self.relogin_btn.configure(bg="#ffffff", fg="#24323f", activebackground="#f4f7fa", activeforeground="#24323f")
+
+    def _poll(self) -> None:
+        if check_signal(self.cwd, SIGNAL_SHOW_PANEL):
+            self.show_panel()
+        self._refresh_ui()
+        if self.status_store.snapshot().get("exit_requested"):
+            self.root.destroy()
+            return
+        self.root.after(500, self._poll)
+
+    def run(self) -> None:
+        self.show_panel()
+        self.root.mainloop()
 
 
 def now_iso() -> str:
@@ -248,6 +582,7 @@ def ensure_dashboard_placeholder(directory: Path) -> None:
   <style>
     body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; margin: 0; display: grid; place-items: center; min-height: 100vh; background: #f5f7fb; color: #1f2937; }
     .box { width: min(680px, calc(100vw - 32px)); text-align: left; padding: 24px; background: #fff; border: 1px solid #e5e7eb; border-radius: 12px; box-shadow: 0 18px 42px rgba(15, 23, 42, 0.08); }
+    .box[data-phase="relogin_required"] { border: 2px solid #ef4444; box-shadow: 0 22px 48px rgba(127, 29, 29, 0.16); }
     .badge { display: inline-flex; align-items: center; min-height: 28px; padding: 0 12px; border-radius: 999px; font-size: 12px; font-weight: 700; letter-spacing: 0.04em; background: #e0f2fe; color: #0c4a6e; }
     .badge[data-state="error"] { background: #fee2e2; color: #991b1b; }
     .badge[data-state="loading"] { background: #fef3c7; color: #92400e; }
@@ -255,20 +590,30 @@ def ensure_dashboard_placeholder(directory: Path) -> None:
     h2 { margin: 14px 0 8px; font-size: 28px; }
     .hint { color: #475569; margin-top: 10px; line-height: 1.6; }
     .sub { color: #64748b; font-size: 14px; }
+    .alert { display: none; margin-top: 18px; padding: 16px 18px; border-radius: 12px; border: 2px solid #fca5a5; background: linear-gradient(180deg, #fff1f2 0%, #ffe4e6 100%); color: #7f1d1d; }
+    .alert strong { display: block; margin-bottom: 8px; font-size: 18px; }
+    .alert p { margin: 0; font-size: 15px; line-height: 1.7; }
   </style>
 </head>
 <body>
-  <div class="box">
+  <div class="box" id="status_box">
     <div class="badge" id="status_badge" data-state="loading">启动中</div>
     <h2 id="status_title">看板准备中...</h2>
     <div class="hint" id="status_message">正在执行首次抓取，完成后请刷新页面。</div>
     <div class="hint sub" id="status_detail">首次启动、重新登录或更新后，页面可能延迟 10-60 秒，请勿重复操作。</div>
+    <div class="alert" id="status_alert">
+      <strong>需要重新登录</strong>
+      <p id="status_alert_text">请点击“重新登录”，在浏览器中完成登录后关闭浏览器，然后等待 10-60 秒自动刷新。</p>
+    </div>
   </div>
   <script>
+    const boxEl = document.getElementById("status_box");
     const badgeEl = document.getElementById("status_badge");
     const titleEl = document.getElementById("status_title");
     const messageEl = document.getElementById("status_message");
     const detailEl = document.getElementById("status_detail");
+    const alertEl = document.getElementById("status_alert");
+    const alertTextEl = document.getElementById("status_alert_text");
 
     function applyStatus(status) {
       const phase = String((status && status.phase) || "");
@@ -279,17 +624,23 @@ def ensure_dashboard_placeholder(directory: Path) -> None:
 
       badgeEl.textContent = badge;
       badgeEl.dataset.state = badgeState;
+      boxEl.dataset.phase = phase;
       messageEl.textContent = message;
       detailEl.textContent = detail;
 
       if (phase === "relogin_required") {
         titleEl.textContent = "需要重新登录";
+        alertEl.style.display = "block";
+        alertTextEl.textContent = `${message} ${detail}`.trim();
       } else if (phase === "error") {
         titleEl.textContent = "更新失败";
+        alertEl.style.display = "none";
       } else if (phase === "ok") {
         titleEl.textContent = "看板已准备完成";
+        alertEl.style.display = "none";
       } else {
         titleEl.textContent = "看板准备中...";
+        alertEl.style.display = "none";
       }
     }
 
@@ -548,10 +899,75 @@ def latest_filters_summary(output_dir: Path) -> dict | None:
         with summary_path.open("r", encoding="utf-8") as f:
             data = json.load(f)
         if isinstance(data, dict):
+            data["_run_dir"] = str(latest.resolve())
             return data
     except Exception:
         return None
     return None
+
+
+def _looks_like_target_order_item(item: dict[str, Any]) -> bool:
+    label = str(item.get("label", ""))
+    json_file = str(item.get("json_file", ""))
+    csv_file = str(item.get("csv_file", ""))
+    haystack = "\n".join((label, json_file, csv_file))
+    return any(token in haystack for token in ("订单统计", "u8ba2u5355u7edfu8ba1"))
+
+
+def _resolve_summary_item_file(run_dir: Path | None, file_value: str) -> Path | None:
+    if not file_value:
+        return None
+    path = Path(file_value)
+    if path.is_absolute():
+        return path
+    if run_dir is None:
+        return None
+    candidates = [
+        run_dir / path.name,
+        run_dir.parent.parent / path,
+        run_dir.parent / path,
+    ]
+    for candidate in candidates:
+        if candidate.exists():
+            return candidate
+    return candidates[0]
+
+
+def _summary_item_has_capture_data(item: dict[str, Any], run_dir: Path | None) -> bool:
+    raw_count = item.get("record_count", 0)
+    try:
+        record_count = int(raw_count or 0)
+    except Exception:
+        record_count = 0
+    if record_count > 0:
+        return True
+
+    csv_path = _resolve_summary_item_file(run_dir, str(item.get("csv_file", "")))
+    if csv_path and csv_path.exists():
+        try:
+            with csv_path.open("r", encoding="utf-8-sig") as f:
+                rows = [line.strip() for line in f if line.strip()]
+            if len(rows) > 1:
+                return True
+        except Exception:
+            pass
+
+    json_path = _resolve_summary_item_file(run_dir, str(item.get("json_file", "")))
+    if json_path and json_path.exists():
+        try:
+            with json_path.open("r", encoding="utf-8") as f:
+                payload = json.load(f)
+            if isinstance(payload, list):
+                return len(payload) > 0
+            if isinstance(payload, dict):
+                return len(payload) > 0
+            if isinstance(payload, str):
+                return bool(payload.strip())
+            return payload is not None
+        except Exception:
+            pass
+
+    return False
 
 
 def should_retry_missing_order_stats(summary: dict | None) -> bool:
@@ -560,16 +976,24 @@ def should_retry_missing_order_stats(summary: dict | None) -> bool:
     items = summary.get("items")
     if not isinstance(items, list):
         return False
+    run_dir_value = summary.get("_run_dir")
+    run_dir = Path(run_dir_value) if isinstance(run_dir_value, str) and run_dir_value else None
+    non_initial_count = 0
+    empty_non_initial_count = 0
 
     for item in items:
         if not isinstance(item, dict):
             continue
         label = str(item.get("label", ""))
-        record_count = int(item.get("record_count", 0) or 0)
-        json_file = str(item.get("json_file", ""))
-        is_order_stats = ("订单统计" in label) or ("u8ba2u5355u7edfu8ba1" in json_file)
-        if is_order_stats and record_count <= 0:
+        has_data = _summary_item_has_capture_data(item, run_dir)
+        if _looks_like_target_order_item(item) and not has_data:
             return True
+        if label != "initial":
+            non_initial_count += 1
+            if not has_data:
+                empty_non_initial_count += 1
+    if non_initial_count >= 3 and empty_non_initial_count == non_initial_count:
+        return True
     return False
 
 
@@ -644,7 +1068,46 @@ def has_usable_state(state_path: Path) -> bool:
     origins = data.get("origins")
     has_cookies = isinstance(cookies, list) and len(cookies) > 0
     has_origins = isinstance(origins, list) and len(origins) > 0
-    return has_cookies or has_origins
+    if not (has_cookies or has_origins):
+        return False
+
+    auth_cookie_names = {"JAAuthCookie", "keepalive", "JATrustCookie"}
+    has_auth_cookie = False
+    if isinstance(cookies, list):
+        for item in cookies:
+            if not isinstance(item, dict):
+                continue
+            name = str(item.get("name", ""))
+            value = str(item.get("value", ""))
+            if name in auth_cookie_names and value:
+                has_auth_cookie = True
+                break
+
+    has_app_user_token = False
+    if isinstance(origins, list):
+        for origin in origins:
+            if not isinstance(origin, dict) or origin.get("origin") != "https://make.sjtu.edu.cn":
+                continue
+            local_storage = origin.get("localStorage")
+            if not isinstance(local_storage, list):
+                continue
+            for item in local_storage:
+                if not isinstance(item, dict) or item.get("name") != "app-user":
+                    continue
+                raw_value = item.get("value")
+                if not isinstance(raw_value, str) or not raw_value.strip():
+                    continue
+                try:
+                    app_user = json.loads(raw_value)
+                except Exception:
+                    continue
+                if isinstance(app_user, dict) and str(app_user.get("token", "")).strip():
+                    has_app_user_token = True
+                    break
+            if has_app_user_token:
+                break
+
+    return has_auth_cookie or has_app_user_token
 
 
 def build_main_common_args(args: argparse.Namespace) -> list[str]:
@@ -708,13 +1171,14 @@ def run_once(args: argparse.Namespace, cwd: Path) -> int:
 
     summary = latest_filters_summary(output_dir)
     if should_retry_missing_order_stats(summary):
-        print(f"[{now_str()}] [TASK] Missing order-stats capture detected, retrying once...")
+        print(f"[{now_str()}] [TASK] Missing order capture detected, retrying once...")
         retry_code = run_main_command(args, cwd, extra)
         if retry_code != 0:
             return retry_code
         retry_summary = latest_filters_summary(output_dir)
         if should_retry_missing_order_stats(retry_summary):
-            print(f"[{now_str()}] [TASK] Warning: order-stats capture still missing after retry.")
+            print(f"[{now_str()}] [TASK] Warning: filtered capture is still blank after retry, login is likely invalid.")
+            return RUN_ONCE_RELOGIN_REQUIRED
     return 0
 
 
@@ -781,101 +1245,155 @@ def build_parser() -> argparse.ArgumentParser:
     return parser
 
 
-def show_error_dialog(title: str, message: str) -> None:
-    """Show an error dialog visible to the user (before logging redirect)."""
-    try:
-        import tkinter as tk
-        from tkinter import messagebox
-        root = tk.Tk()
-        root.withdraw()
-        messagebox.showerror(title, message)
-        root.destroy()
-    except Exception:
-        pass
-
-
-def ensure_login(args: argparse.Namespace, cwd: Path) -> bool:
-    """Ensure login state exists BEFORE entering background mode.
-
-    Returns True if state is ready, False if login failed.
-    """
+def ensure_login(args: argparse.Namespace, cwd: Path) -> tuple[bool, str]:
     state_path = (cwd / args.state_path).resolve()
     if has_usable_state(state_path):
-        return True
+        return True, ""
 
-    # No state — run login with visible browser (not in background yet).
     try:
         code = run_main_command(args, cwd, ["login"], interactive=True)
         if code == 0 and has_usable_state(state_path):
-            return True
-        # Login returned but state is not valid — user may have closed browser
-        # before completing login.
-        show_error_dialog("登录失败", "未检测到有效登录状态。\n请重新运行，在浏览器中完成登录后再关闭浏览器。")
+            return True, ""
     except Exception as e:
-        show_error_dialog("登录失败", f"浏览器启动或登录过程出错：\n{e}")
-    return False
+        return False, f"浏览器启动或登录过程出错：{e}"
+    return False, "未检测到有效登录状态。请在浏览器中完成登录后再关闭浏览器。"
 
 
-def main() -> int:
-    args = build_parser().parse_args()
-    cwd = resolve_runtime_root(Path(__file__))
+def publish_runtime_status(
+    status_store: RuntimeStatusStore,
+    dashboard_dir: Path,
+    *,
+    phase: str,
+    badge: str,
+    badge_state: str,
+    message: str,
+    detail: str = "",
+    next_run_at: str = "",
+    last_success_at: str = "",
+) -> None:
+    status_store.update(
+        phase=phase,
+        badge=badge,
+        badge_state=badge_state,
+        message=message,
+        detail=detail,
+        next_run_at=next_run_at,
+        last_success_at=last_success_at,
+    )
+    write_dashboard_status(
+        dashboard_dir,
+        phase=phase,
+        badge=badge,
+        badge_state=badge_state,
+        message=message,
+        detail=detail,
+        next_run_at=next_run_at,
+        last_success_at=last_success_at,
+    )
 
-    released_pids = auto_free_port(args.host, args.port)
-    if released_pids:
-        joined = ", ".join(str(pid) for pid in released_pids)
-        print(f"[{now_str()}] [WEB] Released occupied port {args.port} from PID(s): {joined}")
 
-    instance_lock = acquire_single_instance_lock(cwd)
-    if instance_lock is None:
-        if is_service_running(cwd):
-            action = show_control_dialog(cwd)
-            if action == "relogin":
-                (cwd / SIGNAL_RELOGIN).write_text("", encoding="utf-8")
-            elif action == "stop":
-                (cwd / SIGNAL_STOP).write_text("", encoding="utf-8")
-        else:
-            show_already_starting_dialog()
-        return 0
+def run_service_loop(args: argparse.Namespace, cwd: Path, status_store: RuntimeStatusStore) -> None:
+    dashboard_dir = (cwd / args.dashboard_dir).resolve()
+    output_dir = (cwd / args.output_dir).resolve()
+    state_path = (cwd / args.state_path).resolve()
+    server: ThreadingHTTPServer | None = None
+    last_success_at = ""
+    last_run_finished_ts = 0.0
+
+    write_pid(cwd)
+    status_store.update(
+        phase="starting",
+        badge="启动中",
+        badge_state="loading",
+        message="管理面板已启动，正在准备运行环境。",
+        detail="请勿重复双击；再次双击会直接唤醒这个面板。",
+    )
 
     try:
+        setup_logging(cwd)
+        ensure_dashboard_placeholder(dashboard_dir)
+
+        if args.interval_minutes <= 0:
+            publish_runtime_status(
+                status_store,
+                dashboard_dir,
+                phase="error",
+                badge="启动失败",
+                badge_state="error",
+                message="启动参数无效，无法继续运行。",
+                detail="--interval-minutes 必须大于 0。",
+                last_success_at=last_success_at,
+            )
+            return
+
+        if args.keep_output_runs <= 0 or args.keep_single_files <= 0:
+            publish_runtime_status(
+                status_store,
+                dashboard_dir,
+                phase="error",
+                badge="启动失败",
+                badge_state="error",
+                message="输出保留参数无效，无法继续运行。",
+                detail="--keep-output-runs 和 --keep-single-files 必须大于 0。",
+                last_success_at=last_success_at,
+            )
+            return
+
+        released_pids = auto_free_port(args.host, args.port)
+        if released_pids:
+            joined = ", ".join(str(pid) for pid in released_pids)
+            print(f"[{now_str()}] [WEB] Released occupied port {args.port} from PID(s): {joined}")
+
         try:
             ensure_port_available(args.host, args.port)
         except RuntimeError as exc:
-            show_error_dialog("端口被占用", str(exc))
-            print(f"[ERROR] {exc}")
-            return 1
+            publish_runtime_status(
+                status_store,
+                dashboard_dir,
+                phase="error",
+                badge="端口被占用",
+                badge_state="error",
+                message="程序无法启动本地看板服务。",
+                detail=str(exc),
+                last_success_at=last_success_at,
+            )
+            return
 
-        # Step 1: Ensure login BEFORE going silent — browser must be visible.
-        if not ensure_login(args, cwd):
-            return 1
+        publish_runtime_status(
+            status_store,
+            dashboard_dir,
+            phase="starting",
+            badge="登录检查中",
+            badge_state="loading",
+            message="正在检查登录状态。",
+            detail="如果需要登录，稍后会自动打开浏览器。",
+            last_success_at=last_success_at,
+        )
+        ok, login_error = ensure_login(args, cwd)
+        if not ok:
+            publish_runtime_status(
+                status_store,
+                dashboard_dir,
+                phase="relogin_required",
+                badge="需要重新登录",
+                badge_state="error",
+                message="当前登录状态不可用，必须重新登录后才能继续抓取数据。",
+                detail=f"{login_error} 请点击“重新登录”，在浏览器中完成登录后关闭浏览器，然后等待 10-60 秒自动刷新。",
+                last_success_at=last_success_at,
+            )
+            return
 
-        # Step 2: Now go into background mode — redirect output to log file.
-        setup_logging(cwd)
-        write_pid(cwd)
-
-        dashboard_dir = (cwd / args.dashboard_dir).resolve()
-        output_dir = (cwd / args.output_dir).resolve()
-        state_path = (cwd / args.state_path).resolve()
-        ensure_dashboard_placeholder(dashboard_dir)
-        last_success_at = ""
-        if args.interval_minutes <= 0:
-            print("[ERROR] --interval-minutes must be > 0")
-            remove_pid(cwd)
-            return 1
-        if args.keep_output_runs <= 0 or args.keep_single_files <= 0:
-            print("[ERROR] --keep-output-runs and --keep-single-files must be > 0")
-            remove_pid(cwd)
-            return 1
-
-        # Clean stale signal files from previous runs.
         check_signal(cwd, SIGNAL_RELOGIN)
         check_signal(cwd, SIGNAL_STOP)
+        check_signal(cwd, SIGNAL_RUN_NOW)
 
         server = start_web_server(dashboard_dir, args.host, args.port)
         interval = timedelta(minutes=args.interval_minutes)
         next_run = datetime.now() if not args.no_run_immediately else datetime.now() + interval
         last_interrupt_ts = 0.0
-        write_dashboard_status(
+
+        publish_runtime_status(
+            status_store,
             dashboard_dir,
             phase="starting",
             badge="启动中",
@@ -893,17 +1411,58 @@ def main() -> int:
 
         while True:
             try:
-                # Check stop signal.
                 if check_signal(cwd, SIGNAL_STOP):
                     print(f"[{now_str()}] [SYS] Stop signal received, shutting down.")
-                    server.shutdown()
-                    remove_pid(cwd)
-                    return 0
+                    publish_runtime_status(
+                        status_store,
+                        dashboard_dir,
+                        phase="stopping",
+                        badge="停止中",
+                        badge_state="loading",
+                        message="正在停止服务，请稍候。",
+                        detail="窗口即将关闭。",
+                        next_run_at="",
+                        last_success_at=last_success_at,
+                    )
+                    return
 
-                # Check re-login signal.
+                run_now_requested = check_signal(cwd, SIGNAL_RUN_NOW)
+                if run_now_requested:
+                    now_ts = time.time()
+                    print(f"[{now_str()}] [SYS] Received immediate-update signal.")
+                    if last_run_finished_ts and (now_ts - last_run_finished_ts) < RUN_NOW_DEBOUNCE_SECONDS:
+                        remaining = int(RUN_NOW_DEBOUNCE_SECONDS - (now_ts - last_run_finished_ts))
+                        print(f"[{now_str()}] [SYS] Ignored immediate-update signal: last update finished too recently ({remaining}s remaining).")
+                        publish_runtime_status(
+                            status_store,
+                            dashboard_dir,
+                            phase="ok" if last_success_at else "starting",
+                            badge="运行中" if last_success_at else "启动中",
+                            badge_state="live" if last_success_at else "loading",
+                            message="刚完成一次数据更新，已忽略重复的立即更新请求。",
+                            detail=f"请等待约 {remaining} 秒后再点“数据更新”，不要连续触发。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+                    else:
+                        next_run = datetime.now()
+                        print(f"[{now_str()}] [SYS] Accepted immediate-update signal, scheduling update now.")
+                        publish_runtime_status(
+                            status_store,
+                            dashboard_dir,
+                            phase="updating",
+                            badge="即将更新",
+                            badge_state="loading",
+                            message="已收到立即更新请求，正在准备抓取最新数据。",
+                            detail="请等待 10-60 秒，不要重复点击。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
+
                 if check_signal(cwd, SIGNAL_RELOGIN):
                     print(f"[{now_str()}] [SYS] Re-login signal received.")
-                    write_dashboard_status(
+                    publish_runtime_status(
+                        status_store,
                         dashboard_dir,
                         phase="relogin_in_progress",
                         badge="重新登录中",
@@ -917,7 +1476,8 @@ def main() -> int:
                     if login_code == 0 and has_usable_state(state_path):
                         print(f"[{now_str()}] [SYS] Re-login complete.")
                         next_run = datetime.now()
-                        write_dashboard_status(
+                        publish_runtime_status(
+                            status_store,
                             dashboard_dir,
                             phase="updating",
                             badge="登录已更新",
@@ -928,20 +1488,22 @@ def main() -> int:
                             last_success_at=last_success_at,
                         )
                     else:
-                        write_dashboard_status(
+                        publish_runtime_status(
+                            status_store,
                             dashboard_dir,
                             phase="error",
                             badge="重新登录未完成",
                             badge_state="error",
                             message="这次重新登录没有完成，当前还没有刷新出新数据。",
-                            detail="如果你刚关闭浏览器，请等待 10-60 秒；若长时间无变化，再双击程序并点击“重新登录”。",
+                            detail="如果你刚关闭浏览器，请等待 10-60 秒；若长时间无变化，再点击“重新登录”。",
                             next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
                             last_success_at=last_success_at,
                         )
 
                 now = datetime.now()
                 if now >= next_run:
-                    write_dashboard_status(
+                    publish_runtime_status(
+                        status_store,
                         dashboard_dir,
                         phase="updating",
                         badge="更新中",
@@ -954,6 +1516,7 @@ def main() -> int:
                     started = time.time()
                     code = run_once(args, cwd)
                     elapsed = time.time() - started
+                    last_run_finished_ts = time.time()
                     status = "SUCCESS" if code == 0 else "FAILED"
                     print(f"[{now_str()}] [TASK] {status}, elapsed: {elapsed:.1f}s")
                     if not args.no_clean_output:
@@ -964,7 +1527,8 @@ def main() -> int:
                     print(f"[{now_str()}] [TASK] Next run at: {next_run.strftime('%Y-%m-%d %H:%M:%S')}")
                     if code == 0:
                         last_success_at = now_str()
-                        write_dashboard_status(
+                        publish_runtime_status(
+                            status_store,
                             dashboard_dir,
                             phase="ok",
                             badge="运行中",
@@ -974,14 +1538,27 @@ def main() -> int:
                             next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
                             last_success_at=last_success_at,
                         )
+                    elif code == RUN_ONCE_RELOGIN_REQUIRED:
+                        publish_runtime_status(
+                            status_store,
+                            dashboard_dir,
+                            phase="relogin_required",
+                            badge="需要重新登录",
+                            badge_state="error",
+                            message="检测到关键筛选结果异常为空，当前登录状态很可能已经失效。",
+                            detail="请立即点击“重新登录”，在浏览器中完成登录后关闭浏览器，然后等待 10-60 秒自动刷新。",
+                            next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
+                            last_success_at=last_success_at,
+                        )
                     else:
-                        write_dashboard_status(
+                        publish_runtime_status(
+                            status_store,
                             dashboard_dir,
                             phase="error" if has_usable_state(state_path) else "relogin_required",
                             badge="更新失败" if has_usable_state(state_path) else "需要重新登录",
                             badge_state="error",
                             message="本次更新没有成功。若只是刚操作完，请先等待 10-60 秒，不要重复点击。",
-                            detail="如果页面长时间空白或一直不更新，再双击程序并点击“重新登录”。",
+                            detail="如果页面长时间空白或一直不更新，再点击“重新登录”。",
                             next_run_at=next_run.strftime("%Y-%m-%d %H:%M:%S"),
                             last_success_at=last_success_at,
                         )
@@ -990,14 +1567,77 @@ def main() -> int:
                 ts = time.time()
                 if ts - last_interrupt_ts <= 3.0:
                     print(f"[{now_str()}] [SYS] Stopped by user.")
-                    server.shutdown()
-                    remove_pid(cwd)
-                    return 0
+                    publish_runtime_status(
+                        status_store,
+                        dashboard_dir,
+                        phase="stopping",
+                        badge="停止中",
+                        badge_state="loading",
+                        message="正在停止服务，请稍候。",
+                        detail="窗口即将关闭。",
+                        next_run_at="",
+                        last_success_at=last_success_at,
+                    )
+                    return
                 last_interrupt_ts = ts
                 print(f"[{now_str()}] [SYS] Interrupt received. Press Ctrl+C again within 3s to stop.")
                 next_run = datetime.now()
+    except Exception as e:
+        print(f"[ERROR] {e}")
+        publish_runtime_status(
+            status_store,
+            dashboard_dir,
+            phase="error",
+            badge="程序异常",
+            badge_state="error",
+            message="服务运行中发生异常。",
+            detail=str(e),
+            last_success_at=last_success_at,
+        )
     finally:
+        if server is not None:
+            try:
+                server.shutdown()
+            except Exception:
+                pass
+            try:
+                server.server_close()
+            except Exception:
+                pass
+        remove_pid(cwd)
+        status_store.update(service_alive=False)
+        if status_store.snapshot().get("phase") == "stopping":
+            status_store.update(exit_requested=True)
+
+
+def main() -> int:
+    args = build_parser().parse_args()
+    cwd = resolve_runtime_root(Path(__file__))
+
+    instance_lock = acquire_single_instance_lock(cwd)
+    if instance_lock is None:
+        write_signal(cwd, SIGNAL_SHOW_PANEL)
+        return 0
+
+    status_store = RuntimeStatusStore(build_dashboard_url(args.host, args.port))
+    app = ControlPanelApp(cwd, args, status_store)
+    worker = threading.Thread(
+        target=run_service_loop,
+        args=(args, cwd, status_store),
+        name="dashboard-service",
+        daemon=True,
+    )
+    worker.start()
+
+    try:
+        app.run()
+    finally:
+        if worker.is_alive():
+            write_signal(cwd, SIGNAL_STOP)
+            if not status_store.snapshot().get("force_exit_requested"):
+                worker.join(timeout=5.0)
         release_single_instance_lock(cwd, instance_lock)
+    return 0
 
 
 if __name__ == "__main__":
