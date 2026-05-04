@@ -36,6 +36,7 @@ COOKIE_PERSIST_DOMAINS = [
     "make.sjtu.edu.cn",
 ]
 JWT_REFRESH_MARGIN_SECONDS = 12 * 60 * 60
+AUTH_SESSION_REFRESH_INTERVAL_SECONDS = 12 * 60 * 60
 
 
 def ensure_parent_dir(path: Path) -> None:
@@ -103,11 +104,10 @@ def save_storage_state(
     years: int,
     domains: list[str] | None,
 ) -> None:
-    ensure_parent_dir(path)
     storage_state = read_storage_state(context)
     expires_at = compute_cookie_expiry(years)
     storage_state = rewrite_cookie_expiry(storage_state, expires_at, domains)
-    path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+    save_storage_state_file(path, storage_state)
 
 
 def load_storage_state_file(path: Path) -> dict[str, Any]:
@@ -116,7 +116,9 @@ def load_storage_state_file(path: Path) -> dict[str, Any]:
 
 def save_storage_state_file(path: Path, storage_state: dict[str, Any]) -> None:
     ensure_parent_dir(path)
-    path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+    tmp_path = path.with_name(f".{path.name}.tmp")
+    tmp_path.write_text(json.dumps(storage_state, ensure_ascii=False), encoding="utf-8")
+    tmp_path.replace(path)
 
 
 def get_make_origin_state(storage_state: dict[str, Any]) -> dict[str, Any]:
@@ -179,6 +181,47 @@ def write_app_user_to_storage_state(storage_state: dict[str, Any], app_user: dic
     upsert_local_storage_item(origin_state, "app-user", json.dumps(app_user, ensure_ascii=False))
 
 
+def cookie_storage_key(cookie: dict[str, Any]) -> tuple[str, str, str]:
+    return (
+        str(cookie.get("name", "")),
+        str(cookie.get("domain", "")),
+        str(cookie.get("path", "")),
+    )
+
+
+def merge_refreshed_cookies(
+    storage_state: dict[str, Any],
+    refreshed_storage_state: dict[str, Any] | None,
+    years: int,
+    domains: list[str] | None,
+) -> dict[str, Any]:
+    if not isinstance(refreshed_storage_state, dict):
+        return storage_state
+
+    refreshed_cookies = refreshed_storage_state.get("cookies")
+    if not isinstance(refreshed_cookies, list):
+        return storage_state
+
+    existing_cookies = storage_state.get("cookies", [])
+    merged: dict[tuple[str, str, str], dict[str, Any]] = {}
+    if isinstance(existing_cookies, list):
+        for cookie in existing_cookies:
+            if isinstance(cookie, dict) and not should_persist_cookie(cookie, domains):
+                merged[cookie_storage_key(cookie)] = dict(cookie)
+
+    expires_at = compute_cookie_expiry(years)
+    for cookie in refreshed_cookies:
+        if not isinstance(cookie, dict):
+            continue
+        cookie_copy = dict(cookie)
+        if should_persist_cookie(cookie_copy, domains):
+            cookie_copy["expires"] = expires_at
+        merged[cookie_storage_key(cookie_copy)] = cookie_copy
+
+    storage_state["cookies"] = list(merged.values())
+    return storage_state
+
+
 def decode_jwt_payload(token: str) -> dict[str, Any] | None:
     if not token:
         return None
@@ -194,41 +237,59 @@ def decode_jwt_payload(token: str) -> dict[str, Any] | None:
     return data if isinstance(data, dict) else None
 
 
-def read_app_user_token_exp(storage_state: dict[str, Any]) -> int | None:
+def read_app_user_token_payload(storage_state: dict[str, Any]) -> dict[str, Any] | None:
     app_user = read_app_user_from_storage_state(storage_state)
     if not app_user:
         return None
     token = app_user.get("token")
     if not isinstance(token, str) or not token:
         return None
-    payload = decode_jwt_payload(token)
+    return decode_jwt_payload(token)
+
+
+def read_app_user_token_exp(storage_state: dict[str, Any]) -> int | None:
+    payload = read_app_user_token_payload(storage_state)
     exp = None if payload is None else payload.get("exp")
     return exp if isinstance(exp, int) else None
+
+
+def read_app_user_token_iat(storage_state: dict[str, Any]) -> int | None:
+    payload = read_app_user_token_payload(storage_state)
+    iat = None if payload is None else payload.get("iat")
+    return iat if isinstance(iat, int) else None
 
 
 def needs_app_user_token_refresh(
     state_path: Path,
     refresh_margin_seconds: int = JWT_REFRESH_MARGIN_SECONDS,
+    session_refresh_interval_seconds: int = AUTH_SESSION_REFRESH_INTERVAL_SECONDS,
 ) -> tuple[bool, str]:
     if not state_path.exists():
         return False, "state_missing"
 
     storage_state = load_storage_state_file(state_path)
+    now = int(time.time())
     exp = read_app_user_token_exp(storage_state)
     if exp is None:
         return True, "token_missing"
 
-    remaining = exp - int(time.time())
+    remaining = exp - now
     if remaining <= 0:
         return True, "token_expired"
     if remaining <= refresh_margin_seconds:
         return True, "token_expiring_soon"
+
+    iat = read_app_user_token_iat(storage_state)
+    if iat is not None and now - iat >= session_refresh_interval_seconds:
+        return True, "session_refresh_due"
+
     return False, "token_still_valid"
 
 
 def merge_first_login_result(
     state_path: Path,
     response_body: dict[str, Any],
+    refreshed_storage_state: dict[str, Any] | None = None,
 ) -> None:
     result = response_body.get("result")
     if not isinstance(result, dict):
@@ -240,6 +301,12 @@ def merge_first_login_result(
         raise RuntimeError("first-login did not return a valid token")
 
     storage_state = load_storage_state_file(state_path)
+    storage_state = merge_refreshed_cookies(
+        storage_state,
+        refreshed_storage_state,
+        COOKIE_PERSIST_YEARS,
+        COOKIE_PERSIST_DOMAINS,
+    )
     app_user = read_app_user_from_storage_state(storage_state) or {}
     app_user.update(user_info)
     app_user["token"] = token
@@ -264,12 +331,13 @@ def refresh_app_user_token(
             if status >= 400:
                 raise RuntimeError(f"first-login HTTP {status}: {resp.text()[:300]}")
             response_body = resp.json()
+            refreshed_storage_state = read_storage_state(request_context)
         finally:
             request_context.dispose()
 
     if not isinstance(response_body, dict):
         raise RuntimeError("first-login returned invalid JSON")
-    merge_first_login_result(state_path, response_body)
+    merge_first_login_result(state_path, response_body, refreshed_storage_state)
     print("[AUTH] app-user.token refreshed.")
     return True
 
@@ -297,6 +365,7 @@ def save_login_state(page_url: str, state_path: Path, browser_channel: str | Non
         except Exception:
             pass
 
+        save_error: Exception | None = None
         try:
             save_storage_state(
                 context,
@@ -304,13 +373,16 @@ def save_login_state(page_url: str, state_path: Path, browser_channel: str | Non
                 COOKIE_PERSIST_YEARS,
                 COOKIE_PERSIST_DOMAINS,
             )
-        except Exception:
-            pass
+        except Exception as exc:
+            save_error = exc
 
         try:
             browser.close()
         except Exception:
             pass
+
+    if save_error is not None:
+        raise RuntimeError(f"Failed to save login session: {save_error}")
 
     print(f"[OK] Login session saved: {state_path}")
 
@@ -552,7 +624,7 @@ def detect_filter_buttons(page: Page, filter_selector: str | None) -> list[dict[
             for (const el of document.querySelectorAll(selector)) {
                 if (!isVisible(el)) continue;
 
-                const text = (el.innerText || el.textContent || '').replace(/\s+/g, ' ').trim();
+                const text = (el.innerText || el.textContent || '').replace(/\\s+/g, ' ').trim();
                 if (!text || text.length > 20) continue;
                 if (badWords.some(w => text.includes(w))) continue;
 
