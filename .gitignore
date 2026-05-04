@@ -18,3 +18,4 @@ auth/
 dashboard.lock
 dashboard_runner.spec
 dist_release/
+dist_fixed/

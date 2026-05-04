@@ -22,8 +22,10 @@ DEFAULT_BROWSER_CHANNEL = "auto"
 DEFAULT_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/order-count"
 ASSIST_PAGE_URL = "https://make.sjtu.edu.cn/admin/statistics/assist-action"
 ASSIST_API_URL = "https://make.sjtu.edu.cn/api/statistics/assist-action"
+ADMIN_ORDERS_API_URL = "https://make.sjtu.edu.cn/api/admin/orders"
 FIRST_LOGIN_API_URL = "https://make.sjtu.edu.cn/api/user/first-login"
 MAKE_ORIGIN = "https://make.sjtu.edu.cn"
+ADMIN_BOOTSTRAP_PATH = "/admin/thdprint/print-list"
 DEFAULT_STATE_PATH = Path("state/auth_state.json")
 DEFAULT_OUTPUT_DIR = Path("output")
 DEFAULT_DASHBOARD_DIR = Path("dashboard")
@@ -176,6 +178,14 @@ def read_app_user_from_storage_state(storage_state: dict[str, Any]) -> dict[str,
     return data if isinstance(data, dict) else None
 
 
+def read_app_user_token(storage_state: dict[str, Any]) -> str:
+    app_user = read_app_user_from_storage_state(storage_state)
+    if not isinstance(app_user, dict):
+        return ""
+    token = app_user.get("token")
+    return token if isinstance(token, str) and token.strip() else ""
+
+
 def write_app_user_to_storage_state(storage_state: dict[str, Any], app_user: dict[str, Any]) -> None:
     origin_state = get_make_origin_state(storage_state)
     upsert_local_storage_item(origin_state, "app-user", json.dumps(app_user, ensure_ascii=False))
@@ -238,11 +248,8 @@ def decode_jwt_payload(token: str) -> dict[str, Any] | None:
 
 
 def read_app_user_token_payload(storage_state: dict[str, Any]) -> dict[str, Any] | None:
-    app_user = read_app_user_from_storage_state(storage_state)
-    if not app_user:
-        return None
-    token = app_user.get("token")
-    if not isinstance(token, str) or not token:
+    token = read_app_user_token(storage_state)
+    if not token:
         return None
     return decode_jwt_payload(token)
 
@@ -453,6 +460,7 @@ def build_record(resp: Any) -> dict[str, Any]:
         "method": method,
         "status": status,
         "content_type": content_type,
+        "post_data": resp.request.post_data or "",
         "is_json": parsed is not None,
         "json_data": parsed,
         "text_data": body_text if parsed is None else "",
@@ -495,6 +503,67 @@ def launch_browser(p, headless: bool, channel: str | None):
     raise last_error if last_error else RuntimeError("Unable to launch browser")
 
 
+def origin_from_url(url: str) -> str:
+    parsed = urlparse(url)
+    return f"{parsed.scheme}://{parsed.netloc}"
+
+
+def normalized_url_path(url: str) -> str:
+    path = urlparse(url).path.rstrip("/")
+    return path or "/"
+
+
+def is_admin_page_url(url: str) -> bool:
+    return normalized_url_path(url).startswith("/admin/")
+
+
+def wait_for_page_settle(page: Page, timeout_ms: int = 8000) -> None:
+    try:
+        page.wait_for_load_state("networkidle", timeout=timeout_ms)
+    except Exception:
+        pass
+
+
+def warm_up_admin_route(page: Page, page_url: str) -> None:
+    if not is_admin_page_url(page_url):
+        return
+
+    origin = origin_from_url(page_url)
+    print("[INFO] Warming admin route before capture.")
+    try:
+        page.goto(f"{origin}/", wait_until="domcontentloaded", timeout=60_000)
+        wait_for_page_settle(page, 8000)
+        page.wait_for_timeout(2000)
+
+        admin_link = page.locator(f'a[href="{ADMIN_BOOTSTRAP_PATH}"]').first
+        if admin_link.count() > 0:
+            admin_link.click(timeout=5000)
+        else:
+            page.goto(f"{origin}{ADMIN_BOOTSTRAP_PATH}", wait_until="domcontentloaded", timeout=60_000)
+        wait_for_page_settle(page, 8000)
+        page.wait_for_timeout(2000)
+    except Exception as exc:
+        print(f"[WARN] Admin route warm-up failed, continuing with direct capture: {exc}")
+
+
+def ensure_target_page_reached(page: Page, page_url: str) -> None:
+    expected_path = normalized_url_path(page_url)
+    actual_path = normalized_url_path(page.url)
+    if actual_path == expected_path:
+        return
+    raise RuntimeError(
+        f"Target page was not reached. Expected path {expected_path}, got {page.url}. "
+        "The app may have redirected to the front page before admin state was ready."
+    )
+
+
+def goto_capture_page(page: Page, page_url: str, wait_ms: int) -> None:
+    page.goto(page_url, wait_until="domcontentloaded", timeout=60_000)
+    wait_for_page_settle(page, 10_000)
+    page.wait_for_timeout(wait_ms)
+    ensure_target_page_reached(page, page_url)
+
+
 def fetch_assist_actions(
     assist_api_url: str,
     state_path: Path,
@@ -515,9 +584,13 @@ def fetch_assist_actions(
 
     output_dir.mkdir(parents=True, exist_ok=True)
     dest = output_dir / f"assist_api_{now_tag()}.json"
+    headers = build_auth_headers(state_path)
 
     with sync_playwright() as p:
-        request_context = p.request.new_context(storage_state=str(state_path))
+        request_context = p.request.new_context(
+            storage_state=str(state_path),
+            extra_http_headers=headers,
+        )
         try:
             print(f"[INFO] Fetching assist actions via request: {url}")
             resp = request_context.get(url)
@@ -530,6 +603,121 @@ def fetch_assist_actions(
 
     with dest.open("w", encoding="utf-8") as f:
         json.dump(data, f, ensure_ascii=False, indent=2)
+    return dest
+
+
+def iso_date_key(value: Any) -> str:
+    text = str(value or "").strip()
+    if len(text) >= 10:
+        return text[:10]
+    return ""
+
+
+def build_auth_headers(state_path: Path) -> dict[str, str]:
+    storage_state = load_storage_state_file(state_path)
+    token = read_app_user_token(storage_state)
+    return {"Authorization": f"Bearer {token}"} if token else {}
+
+
+def fetch_recent_admin_orders(
+    admin_orders_api_url: str,
+    state_path: Path,
+    output_dir: Path,
+    *,
+    days: int = 31,
+    page_size: int = 100,
+    max_pages: int = 120,
+) -> Path | None:
+    if not state_path.exists():
+        raise FileNotFoundError(f"State file not found: {state_path}")
+
+    today = datetime.now().date()
+    start_date = (today - timedelta(days=days - 1)).isoformat()
+    end_date = today.isoformat()
+
+    output_dir.mkdir(parents=True, exist_ok=True)
+    dest = output_dir / f"admin_orders_recent_{now_tag()}.json"
+    headers = build_auth_headers(state_path)
+    collected: list[dict[str, Any]] = []
+    fetched_pages = 0
+
+    with sync_playwright() as p:
+        request_context = p.request.new_context(
+            storage_state=str(state_path),
+            extra_http_headers=headers,
+        )
+        try:
+            for page_no in range(1, max_pages + 1):
+                params = urlencode(
+                    {
+                        "current_page": page_no,
+                        "page_size": page_size,
+                        "process_type": "thdprint",
+                    }
+                )
+                url = f"{admin_orders_api_url}?{params}"
+                resp = request_context.get(url)
+                status = int(getattr(resp, "status", 0) or 0)
+                if status >= 400:
+                    raise RuntimeError(f"Admin orders API HTTP {status}: {resp.text()[:300]}")
+
+                fetched_pages = page_no
+                payload = resp.json()
+                result = payload.get("result") if isinstance(payload, dict) else None
+                rows = result.get("rows") if isinstance(result, dict) else None
+                if not isinstance(rows, list) or not rows:
+                    break
+
+                oldest_date = ""
+                for row in rows:
+                    if not isinstance(row, dict):
+                        continue
+                    row_date = iso_date_key(row.get("create_at"))
+                    if row_date:
+                        oldest_date = row_date
+                    if start_date <= row_date <= end_date:
+                        collected.append(row)
+
+                if oldest_date and oldest_date < start_date:
+                    break
+        finally:
+            request_context.dispose()
+
+    record = {
+        "time": datetime.now().isoformat(timespec="seconds"),
+        "url": f"{admin_orders_api_url}?process_type=thdprint&start_date={start_date}&end_date={end_date}",
+        "method": "GET",
+        "status": 200,
+        "content_type": "application/json",
+        "post_data": "",
+        "is_json": True,
+        "json_data": {
+            "code": 0,
+            "message": "recent admin thdprint orders",
+            "result": {
+                "page_config": {
+                    "current_page": 1,
+                    "page_size": len(collected),
+                    "total_page": 1,
+                    "total_num": len(collected),
+                },
+                "rows": collected,
+                "date_range": {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "fetched_pages": fetched_pages,
+                },
+            },
+        },
+        "text_data": "",
+    }
+    with dest.open("w", encoding="utf-8") as f:
+        json.dump([record], f, ensure_ascii=False, indent=2)
+
+    print(
+        f"[OK] Recent admin orders saved: {dest} "
+        f"({len(collected)} rows, {start_date} to {end_date}, {fetched_pages} pages)"
+    )
     return dest
 
 
@@ -554,6 +742,7 @@ def capture_data(
         browser = launch_browser(p, headless=headless, channel=browser_channel)
         context = browser.new_context(storage_state=str(state_path))
         page = context.new_page()
+        warm_up_admin_route(page, page_url)
 
         def on_response(resp: Any) -> None:
             if resp.request.resource_type not in {"xhr", "fetch"}:
@@ -563,8 +752,7 @@ def capture_data(
             records.append(build_record(resp))
 
         page.on("response", on_response)
-        page.goto(page_url, wait_until="networkidle")
-        page.wait_for_timeout(wait_ms)
+        goto_capture_page(page, page_url, wait_ms)
         browser.close()
 
     if not records:
@@ -654,6 +842,17 @@ def detect_filter_buttons(page: Page, filter_selector: str | None) -> list[dict[
 
     if filter_selector:
         return items
+
+    if normalized_url_path(page.url) == "/admin/statistics/order-count":
+        labels = ["全部", "3D打印", "激光切割", "CNC加工"]
+        by_label: dict[str, dict[str, Any]] = {}
+        for item in items:
+            text = str(item.get("text", ""))
+            if text in labels and text not in by_label:
+                by_label[text] = item
+        known_filters = [by_label[label] for label in labels if label in by_label]
+        if len(known_filters) >= 2:
+            return known_filters
 
     groups: dict[str, list[dict[str, Any]]] = {}
     for item in items:
@@ -746,12 +945,12 @@ def capture_data_by_filters(
 
         page.route("**/api/statistics/assist-action*", rewrite_assist_date)
         page.on("response", on_response)
+        warm_up_admin_route(page, page_url)
 
         summary_items: list[dict[str, Any]] = []
 
         current_bucket = []
-        page.goto(page_url, wait_until="networkidle")
-        page.wait_for_timeout(wait_ms)
+        goto_capture_page(page, page_url, wait_ms)
         initial_records = list(current_bucket)
         current_bucket = None
 
@@ -1004,6 +1203,18 @@ def cleanup_old_runs(output_dir: Path, keep: int = 3) -> None:
         except Exception as e:
             print(f"[WARN] Failed to remove {old.name}: {e}")
 
+    admin_order_files = sorted(
+        [p for p in output_dir.iterdir() if p.is_file() and p.name.startswith("admin_orders_recent_")],
+        key=lambda p: p.stat().st_mtime,
+        reverse=True,
+    )
+    for old in admin_order_files[keep:]:
+        try:
+            old.unlink()
+            print(f"[CLEAN] Removed old file: {old.name}")
+        except Exception as e:
+            print(f"[WARN] Failed to remove {old.name}: {e}")
+
 
 def run_fetch(
     page_url: str,
@@ -1074,6 +1285,24 @@ def run_fetch(
         dest = target / "04_u52a9u7ba1u7edfu8ba1.json"
         try:
             shutil.copy2(assist_json, dest)
+        except Exception as copy_err:
+            print(f"[WARN] Failed to store {dest.name}: {copy_err}")
+
+    admin_orders_json: Path | None = None
+    try:
+        admin_orders_json = fetch_recent_admin_orders(
+            admin_orders_api_url=ADMIN_ORDERS_API_URL,
+            state_path=state_path,
+            output_dir=output_dir,
+        )
+    except Exception as admin_err:
+        print(f"[WARN] Recent admin orders capture failed: {admin_err}")
+
+    if admin_orders_json and orders_path is not None:
+        target = orders_path if orders_path.is_dir() else orders_path.parent
+        dest = target / "05_admin_orders_recent.json"
+        try:
+            shutil.copy2(admin_orders_json, dest)
         except Exception as copy_err:
             print(f"[WARN] Failed to store {dest.name}: {copy_err}")
 

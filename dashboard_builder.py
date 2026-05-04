@@ -746,7 +746,7 @@ def collect_record_files(source_type: str, source_path: Path) -> tuple[list[Path
 
 
 def has_core_order_data(source_path: Path) -> bool:
-    """Whether a filters_* run contains /order-list responses with data."""
+    """Whether a filters_* run contains order detail responses with data."""
     if not source_path.is_dir():
         return False
 
@@ -763,7 +763,7 @@ def has_core_order_data(source_path: Path) -> bool:
             if not isinstance(row, dict):
                 continue
             url = str(row.get("url", ""))
-            if "/api/statistics/order-list" not in url:
+            if "/api/statistics/order-list" not in url and "/api/admin/orders" not in url:
                 continue
             payload = row.get("json_data")
             if not isinstance(payload, dict):
@@ -808,10 +808,30 @@ def flatten_order_list(value: Any) -> list[dict[str, Any]]:
     return []
 
 
+def parse_record_post_data(row: dict[str, Any]) -> dict[str, Any]:
+    raw = row.get("post_data")
+    if not isinstance(raw, str) or not raw.strip():
+        return {}
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return {}
+    return data if isinstance(data, dict) else {}
+
+
+def record_order_type(row: dict[str, Any]) -> str:
+    post_data = parse_record_post_data(row)
+    order_type = post_data.get("order_type")
+    return str(order_type or "").strip().lower()
+
+
 def pick_endpoint_results(record_files: list[Path]) -> dict[str, Any]:
     out: dict[str, Any] = {
         "order_list": None,
         "assist_action": None,
+        "statistics_count": None,
+        "past_orders": None,
+        "_past_orders_order_type": "",
     }
 
     for file in record_files:
@@ -842,6 +862,12 @@ def pick_endpoint_results(record_files: list[Path]) -> dict[str, Any]:
                     curr = flatten_order_list(result)
                     if len(curr) >= len(prev):
                         out["order_list"] = result
+            elif "/api/admin/orders" in url:
+                if isinstance(result, dict) and isinstance(result.get("rows"), list):
+                    curr = [x for x in result["rows"] if isinstance(x, dict)]
+                    prev = flatten_order_list(out["order_list"])
+                    if len(curr) >= len(prev):
+                        out["order_list"] = result["rows"]
             elif "/api/statistics/assist-action" in url:
                 if out["assist_action"] is None:
                     out["assist_action"] = result
@@ -850,6 +876,22 @@ def pick_endpoint_results(record_files: list[Path]) -> dict[str, Any]:
                     curr = result if isinstance(result, list) else []
                     if len(curr) >= len(prev):
                         out["assist_action"] = result
+            elif "/api/statistics/count" in url:
+                if isinstance(result, dict):
+                    out["statistics_count"] = result
+            elif "/api/statistics/past-orders" in url:
+                if not isinstance(result, dict):
+                    continue
+                order_type = record_order_type(row)
+                prev_type = str(out.get("_past_orders_order_type") or "")
+                should_replace = out["past_orders"] is None
+                if order_type == "thdprint":
+                    should_replace = True
+                elif prev_type not in {"thdprint"} and order_type:
+                    should_replace = True
+                if should_replace:
+                    out["past_orders"] = result
+                    out["_past_orders_order_type"] = order_type
 
     return out
 
@@ -1152,6 +1194,130 @@ def month_count_from_daily(counter: Counter[str], latest_date: str) -> int:
     return sum(c for d, c in counter.items() if isinstance(d, str) and d.startswith(month_key))
 
 
+def to_int(value: Any) -> int:
+    try:
+        return int(value or 0)
+    except Exception:
+        return 0
+
+
+def distribution_counter(rows: Any, name_map: dict[str, str] | None = None) -> Counter[str]:
+    counter: Counter[str] = Counter()
+    if not isinstance(rows, list):
+        return counter
+    for row in rows:
+        if not isinstance(row, dict):
+            continue
+        raw_name = str(row.get("name") or "").strip()
+        if not raw_name:
+            raw_name = "未标注"
+        name = name_map.get(raw_name, raw_name) if name_map else raw_name
+        counter[maybe_fix_mojibake(name)] += to_int(row.get("count"))
+    return counter
+
+
+def build_action_summary(actions: list[dict[str, Any]]) -> tuple[Counter[str], Counter[str], list[dict[str, Any]]]:
+    action_type: Counter[str] = Counter()
+    action_daily: Counter[str] = Counter()
+    recent_actions = []
+
+    for action in actions:
+        tp = action_zh(str(action.get("action_type", "")))
+        action_type[tp] += 1
+
+        d = parse_date(action.get("create_at"))
+        if d:
+            action_daily[d] += 1
+
+        operator = action.get("operator")
+        op_name = extract_operator_name(operator)
+        if not op_name:
+            op_name = extract_operator_name(action.get("admin"))
+
+        recent_actions.append(
+            {
+                "操作详情": tp,
+                "操作人": op_name,
+                "时间": str(action.get("create_at", "")),
+            }
+        )
+
+    recent_actions.sort(key=lambda x: x["时间"], reverse=True)
+    return action_type, action_daily, recent_actions[:10]
+
+
+def aggregate_actions_from_assist(all_actions: Any) -> list[dict[str, Any]]:
+    if not isinstance(all_actions, list):
+        return []
+    rows = [x for x in all_actions if isinstance(x, dict)]
+    filtered = filter_3d_assist(rows)
+    return dedupe_actions(filtered if filtered else rows)
+
+
+def build_aggregate_3d_dataset(
+    source_type: str,
+    source_path: Path,
+    past_orders: dict[str, Any],
+    all_actions: Any,
+) -> dict[str, Any]:
+    dates = past_orders.get("dates")
+    counts = past_orders.get("counts")
+    order_daily: Counter[str] = Counter()
+    if isinstance(dates, list) and isinstance(counts, list):
+        for date_value, count_value in zip(dates, counts):
+            date = str(date_value or "").strip()
+            if date:
+                order_daily[date] += to_int(count_value)
+
+    sorted_dates = sorted(order_daily.keys())
+    start_date = sorted_dates[0] if sorted_dates else ""
+    latest_date = sorted_dates[-1] if sorted_dates else ""
+    total_orders = sum(order_daily.values())
+    today_count = order_daily.get(latest_date, 0) if latest_date else 0
+    month_count = month_count_from_daily(order_daily, latest_date)
+
+    actions = aggregate_actions_from_assist(all_actions)
+    action_type, action_daily, recent_actions = build_action_summary(actions)
+    purpose = distribution_counter(past_orders.get("purpose_distribution"))
+    departments = distribution_counter(past_orders.get("order_distribution"))
+
+    cards = {
+        "统计区间3D订单总量": total_orders,
+        "本月订单": month_count,
+        "今日新增": today_count,
+        "待审核": 0,
+        "打印中": 0,
+        "待取件": 0,
+    }
+
+    return {
+        "元信息": {
+            "生成时间": datetime.now().strftime("%Y-%m-%d %H:%M:%S"),
+            "数据源类型": "筛选批次" if source_type == "filters" else "单次抓取",
+            "数据源路径": str(source_path),
+            "统计区间": f"{start_date} ~ {latest_date}" if start_date and latest_date else "未知",
+            "最新统计日期": latest_date,
+            "指标口径": "仅统计3D打印订单（统计页 past-orders 聚合口径；不含逐单明细）",
+        },
+        "指标卡": cards,
+        "趋势": {
+            "3D订单日趋势": daily_counter_to_list(order_daily),
+            "3D订单操作日趋势": daily_counter_to_list(action_daily),
+        },
+        "分布": {
+            "订单状态": [],
+            "订单用途": counter_to_list(purpose),
+            "学院分布": counter_with_other(departments, 7, "其余学院"),
+            "打印工艺": [{"name": "未细分", "count": total_orders}] if total_orders else [],
+            "助管操作类型": counter_to_list(action_type),
+        },
+        "表格": {
+            "最近3D订单": [],
+            "最近3D助管操作": recent_actions,
+        },
+    }
+
+
 def build_3d_dataset(
     source_type: str,
     source_path: Path,
@@ -1164,6 +1330,10 @@ def build_3d_dataset(
     all_actions = endpoint_results.get("assist_action")
     if not isinstance(all_actions, list):
         all_actions = []
+    past_orders = endpoint_results.get("past_orders")
+    if not orders and isinstance(past_orders, dict):
+        return build_aggregate_3d_dataset(source_type, source_path, past_orders, all_actions)
+
     actions = filter_3d_assist([x for x in all_actions if isinstance(x, dict)])
     if not actions:
         actions = build_actions_from_order_history(orders)

@@ -1132,6 +1132,16 @@ def cleanup_output_dir(output_dir: Path, keep_output_runs: int, keep_single_file
             csv_file.unlink(missing_ok=True)
             removed_files += 1
 
+    for pattern in ("assist_api_*.json", "admin_orders_recent_*.json"):
+        files = sorted(
+            [p for p in output_dir.glob(pattern) if p.is_file()],
+            key=lambda p: p.stat().st_mtime,
+            reverse=True,
+        )
+        for old_file in files[keep_single_files:]:
+            old_file.unlink(missing_ok=True)
+            removed_files += 1
+
     return removed_dirs, removed_files
 
 
